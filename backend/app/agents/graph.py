@@ -45,6 +45,18 @@ INTEREST_PATTERNS = [
 ]
 
 
+EMAIL_PATTERN = re.compile(r"[a-z0-9._%+-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}", re.IGNORECASE)
+
+# Ação que o grafo pede para a camada de I/O executar (o grafo em si não chama rede).
+ACTION_PROVISION_TRIAL = "PROVISION_TRIAL"
+
+
+def extract_email(message: str) -> Optional[str]:
+    """Primeiro e-mail da mensagem, em minúsculas (login do dono no barber-shop)."""
+    match = EMAIL_PATTERN.search(message or "")
+    return match.group(0).lower().rstrip(".") if match else None
+
+
 class GraphState(TypedDict):
     """Estado que percorre os nós do grafo (compatível com o formato de estado do LangGraph)."""
 
@@ -55,6 +67,7 @@ class GraphState(TypedDict):
     objection_types: List[str]
     reply: Optional[str]
     langgraph_node: str
+    action: Optional[str]
 
 
 def classify_intent(message: str) -> str:
@@ -70,7 +83,14 @@ def classify_intent(message: str) -> str:
 
 
 def _router_node(state: GraphState) -> GraphState:
-    state["intent"] = classify_intent(state["inbound_message"])
+    intent = classify_intent(state["inbound_message"])
+    email = extract_email(state["inbound_message"]) if intent != "UNSUBSCRIBE" else None
+    if email:
+        state["lead"].email = email
+        # Mandar o e-mail é topar o teste ("pode ser, meu e-mail é ...").
+        if intent == "NEUTRAL":
+            intent = "INTERESTED"
+    state["intent"] = intent
     return state
 
 
@@ -94,15 +114,30 @@ def _objection_node(state: GraphState) -> GraphState:
 
 
 def _trial_activator_node(state: GraphState) -> GraphState:
-    """Agente 5: chaveia entre Stand-by VIP (fila no Kanban) e Link Automático da vitrine /{slug}."""
+    """
+    Agente 5. O teste grátis vive no barber-shop e o login lá é por e-mail, então:
+    sem e-mail -> pede o e-mail; Link Automático -> pede o provisionamento (ACTION_PROVISION_TRIAL);
+    Stand-by VIP -> fila no Kanban para um humano liberar pelo painel.
+    """
     lead = state["lead"]
-    if state["trial_mode"] == "AUTO_LINK":
-        lead.status = LeadStatus.TRIAL_STARTED
-        state["langgraph_node"] = "5.TrialActivator:AutoLink"
+    if lead.trial_shop_id:
+        state["langgraph_node"] = "5.TrialActivator:AlreadyActive"
         state["reply"] = (
-            f"Show! Sua página já tá no ar: {lead.preview_url}\n"
-            "São 7 dias grátis, é só abrir e mandar o link pros seus clientes agendarem."
+            f"Sua página da {lead.shop_name} já tá no ar: {lead.preview_url}\n"
+            f"É só entrar com o e-mail {lead.email}. Qualquer dúvida, me chama aqui."
         )
+    elif not lead.email:
+        lead.status = LeadStatus.INTERESTED
+        state["langgraph_node"] = "5.TrialActivator:AwaitingEmail"
+        state["reply"] = (
+            f"Show! Pra eu liberar a página da {lead.shop_name} com 7 dias grátis, "
+            "me passa um e-mail seu? É ele que você vai usar pra entrar no painel."
+        )
+    elif state["trial_mode"] == "AUTO_LINK":
+        lead.status = LeadStatus.INTERESTED
+        state["langgraph_node"] = "5.TrialActivator:Provisioning"
+        state["action"] = ACTION_PROVISION_TRIAL
+        state["reply"] = None  # montada depois do provisionamento, com o link real
     else:
         lead.status = LeadStatus.INTERESTED
         state["langgraph_node"] = "5.TrialActivator:StandBy"
@@ -148,6 +183,7 @@ def classify_and_run_graph(
         "objection_types": [],
         "reply": None,
         "langgraph_node": lead.langgraph_node,
+        "action": None,
     }
 
     if lead.status == LeadStatus.DO_NOT_CONTACT:
@@ -166,4 +202,5 @@ def classify_and_run_graph(
         "new_status": lead.status.value,
         "langgraph_node": state["langgraph_node"],
         "trial_mode": mode,
+        "action": state["action"],
     }

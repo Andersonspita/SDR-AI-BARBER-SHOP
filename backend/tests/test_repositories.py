@@ -154,20 +154,24 @@ class TestPostgresSurvivesRestart(unittest.TestCase):
                 self.assertEqual(client.post(f"/api/leads/{target['id']}/send-d0").status_code, 200)
                 client.post("/api/settings/trial-mode", json={"trial_mode": "AUTO_LINK"})
                 reply = client.post("/webhook/whatsapp", json={"phone": target["phone"], "message": "quero testar"}, headers=WEBHOOK_HEADERS).json()
-                self.assertEqual(reply["lead"]["status"], "TRIAL_STARTED")
+                self.assertEqual(reply["lead"]["langgraph_node"], "5.TrialActivator:AwaitingEmail")
+                reply = client.post("/webhook/whatsapp", json={"phone": target["phone"], "message": "dono@curitiba.com"}, headers=WEBHOOK_HEADERS).json()
+                # Sem integração com o barber-shop no teste: o lead fica na fila de liberação manual.
+                self.assertEqual(reply["lead"]["langgraph_node"], "5.TrialActivator:PendingManual")
 
             store.reset()  # simula o processo reiniciando: nada fica na memória
 
             with TestClient(app) as client:
                 login(client)
                 saved = {l["id"]: l for l in client.get("/api/leads", params={"city": "Curitiba"}).json()["leads"]}
-                self.assertEqual(saved[target["id"]]["status"], "TRIAL_STARTED")
-                self.assertEqual(saved[target["id"]]["langgraph_node"], "5.TrialActivator:AutoLink")
+                self.assertEqual(saved[target["id"]]["status"], "INTERESTED")
+                self.assertEqual(saved[target["id"]]["email"], "dono@curitiba.com")
+                self.assertEqual(saved[target["id"]]["langgraph_node"], "5.TrialActivator:PendingManual")
                 history = client.get(f"/api/leads/{target['id']}/interactions").json()["interactions"]
-                self.assertEqual([i["direction"] for i in history], ["OUTBOUND", "INBOUND", "OUTBOUND"])
+                self.assertEqual([i["direction"] for i in history], ["OUTBOUND", "INBOUND", "OUTBOUND", "INBOUND", "OUTBOUND"])
                 metrics = client.get("/api/metrics").json()
                 self.assertEqual(metrics["trial_mode"], "AUTO_LINK")
-                self.assertGreaterEqual(metrics["daily_sent_count"], 2)
+                self.assertGreaterEqual(metrics["daily_sent_count"], 3)
 
 
 if __name__ == "__main__":

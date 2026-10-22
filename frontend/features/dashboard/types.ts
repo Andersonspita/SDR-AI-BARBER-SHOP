@@ -20,6 +20,9 @@ export type LeadSource = "SYNTHETIC" | "GOOGLE_PLACES";
 
 export type CadenceStep = "D0" | "D2" | "D5";
 
+/** Teste grátis no barber-shop, atualizado pelos webhooks de lá. */
+export type TrialStatus = "PROVISIONED" | "ACTIVATED" | "EXPIRING" | "EXPIRED" | "CONVERTED";
+
 export type ObjectionType = "SEM_TEMPO" | "CLIENTES_VELHOS" | "CADERNO" | "CONCORRENTE";
 
 export type Intent = "UNSUBSCRIBE" | "OBJECTION_RAISED" | "INTERESTED" | "NEUTRAL" | "BLOCKED";
@@ -56,6 +59,10 @@ export interface Lead {
   is_synthetic: boolean;
   cadence_step: CadenceStep | null;
   next_touch_at: string | null;
+  email: string | null;
+  trial_shop_id: string | null;
+  trial_status: TrialStatus | null;
+  trial_ends_at: string | null;
   created_at: string;
 }
 
@@ -84,6 +91,9 @@ export interface Metrics {
   daily_sent_count: number;
   daily_limit: number;
   whatsapp_provider: string;
+  barbershop_integration: boolean;
+  converted_count: number;
+  active_trials_count: number;
 }
 
 export interface ScrapeParams {

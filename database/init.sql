@@ -48,6 +48,12 @@ ALTER TABLE barbershop_leads ADD COLUMN IF NOT EXISTS source VARCHAR(30) NOT NUL
 ALTER TABLE barbershop_leads ADD COLUMN IF NOT EXISTS cadence_step VARCHAR(5);
 ALTER TABLE barbershop_leads ADD COLUMN IF NOT EXISTS next_touch_at TIMESTAMP WITH TIME ZONE;
 
+-- Teste grátis no barber-shop (provisionado pelo SDR, atualizado pelos webhooks de lá)
+ALTER TABLE barbershop_leads ADD COLUMN IF NOT EXISTS email VARCHAR(254);
+ALTER TABLE barbershop_leads ADD COLUMN IF NOT EXISTS trial_shop_id VARCHAR(64);
+ALTER TABLE barbershop_leads ADD COLUMN IF NOT EXISTS trial_status VARCHAR(20);
+ALTER TABLE barbershop_leads ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMP WITH TIME ZONE;
+
 CREATE TABLE IF NOT EXISTS interactions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     lead_id UUID REFERENCES barbershop_leads(id) ON DELETE CASCADE,

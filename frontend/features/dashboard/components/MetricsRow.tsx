@@ -38,8 +38,10 @@ export function MetricsRow({ metrics }: MetricsRowProps) {
     {
       icon: "🚀",
       eyebrow: "Agente 5 • Trial Slug",
-      metric: `${metrics.trial_ready_count} Prontas`,
-      desc: metrics.trial_mode === "AUTO_LINK" ? "Link /slug enviado automaticamente." : "Vitrine /slug em fila VIP (Stand-by).",
+      metric: `${metrics.converted_count} Convertidas`,
+      desc: `${metrics.active_trials_count} em teste grátis agora · ${
+        metrics.trial_mode === "AUTO_LINK" ? "liberação automática" : "liberação manual (Stand-by)"
+      }.`,
     },
   ];
 

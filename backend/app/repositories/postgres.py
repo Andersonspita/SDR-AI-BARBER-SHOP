@@ -21,7 +21,8 @@ DEFAULT_SCHEMA_PATH = Path(__file__).resolve().parents[3] / "database" / "init.s
 _LEAD_COLUMNS = (
     "id, shop_name, slug, owner_name, phone, instagram_handle, bio_url, competitor_name, "
     "estimated_barbers, current_system, priority, status, city, state, neighborhood, "
-    "langgraph_node, last_objection_type, source, cadence_step, next_touch_at, created_at"
+    "langgraph_node, last_objection_type, source, cadence_step, next_touch_at, "
+    "email, trial_shop_id, trial_status, trial_ends_at, created_at"
 )
 _LEAD_SELECT = f"SELECT {_LEAD_COLUMNS} FROM barbershop_leads"
 _DIGITS_SQL = "regexp_replace(phone, '\\D', '', 'g')"
@@ -66,6 +67,10 @@ def _row_to_lead(row: asyncpg.Record) -> BarbershopLead:
         source=row["source"],
         cadence_step=row["cadence_step"],
         next_touch_at=row["next_touch_at"].isoformat() if row["next_touch_at"] else None,
+        email=row["email"],
+        trial_shop_id=row["trial_shop_id"],
+        trial_status=row["trial_status"],
+        trial_ends_at=row["trial_ends_at"].isoformat() if row["trial_ends_at"] else None,
         created_at=row["created_at"].isoformat(),
     )
 
@@ -134,7 +139,7 @@ class PostgresRepository:
         row = await self._pool.fetchrow(
             f"""
             INSERT INTO barbershop_leads ({_LEAD_COLUMNS})
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
             ON CONFLICT (phone) DO NOTHING
             RETURNING {_LEAD_COLUMNS}
             """,
@@ -142,7 +147,9 @@ class PostgresRepository:
             lead.bio_url, lead.competitor_name, lead.estimated_barbers, lead.current_system.value,
             lead.priority, lead.status.value, lead.city, lead.state, lead.neighborhood,
             lead.langgraph_node, lead.last_objection_type, lead.source.value, lead.cadence_step,
-            _parse_ts(lead.next_touch_at), datetime.fromisoformat(lead.created_at),
+            _parse_ts(lead.next_touch_at), lead.email, lead.trial_shop_id,
+            lead.trial_status.value if lead.trial_status else None, _parse_ts(lead.trial_ends_at),
+            datetime.fromisoformat(lead.created_at),
         )
         if row is None:
             row = await self._pool.fetchrow(f"{_LEAD_SELECT} WHERE phone = $1", lead.phone)
@@ -155,13 +162,15 @@ class PostgresRepository:
                 shop_name = $2, owner_name = $3, instagram_handle = $4, bio_url = $5, competitor_name = $6,
                 estimated_barbers = $7, current_system = $8, priority = $9, status = $10, neighborhood = $11,
                 langgraph_node = $12, last_objection_type = $13, cadence_step = $14, next_touch_at = $15,
+                email = $16, trial_shop_id = $17, trial_status = $18, trial_ends_at = $19, slug = $20,
                 updated_at = NOW()
             WHERE id = $1
             """,
             lead.id, lead.shop_name, lead.owner_name, lead.instagram_handle, lead.bio_url, lead.competitor_name,
             lead.estimated_barbers, lead.current_system.value, lead.priority, lead.status.value,
             lead.neighborhood, lead.langgraph_node, lead.last_objection_type, lead.cadence_step,
-            _parse_ts(lead.next_touch_at),
+            _parse_ts(lead.next_touch_at), lead.email, lead.trial_shop_id,
+            lead.trial_status.value if lead.trial_status else None, _parse_ts(lead.trial_ends_at), lead.slug,
         )
 
     async def get_lead(self, lead_id: str) -> Optional[BarbershopLead]:

@@ -58,6 +58,10 @@ def build_metrics(
         "trial_ready_count": sum(
             1 for l in leads if l.status in (LeadStatus.INTERESTED, LeadStatus.TRIAL_STARTED, LeadStatus.CONVERTED)
         ),
+        "converted_count": sum(1 for l in leads if l.status == LeadStatus.CONVERTED),
+        "active_trials_count": sum(
+            1 for l in leads if l.trial_status and l.trial_status.value in ("PROVISIONED", "ACTIVATED", "EXPIRING")
+        ),
         "objection_breakdown": objection_counts,
         "top_objection": top_objection,
         "trial_mode": trial_mode,

@@ -2,13 +2,15 @@ from __future__ import annotations
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
 from enum import Enum
+import os
 import re
 import unicodedata
 import uuid
 from typing import Optional
 
 
-SAAS_BASE_URL = "https://barber-shop.horizonaj.com.br"
+# Endereço público do barber-shop (vitrines em /{slug}). Mesmo valor do APP_URL de lá.
+SAAS_BASE_URL = os.getenv("SAAS_BASE_URL", "https://barber-shop.horizonaj.com.br").rstrip("/")
 
 
 class LeadStatus(str, Enum):
@@ -28,6 +30,16 @@ class LeadSource(str, Enum):
 
     SYNTHETIC = "SYNTHETIC"
     GOOGLE_PLACES = "GOOGLE_PLACES"
+
+
+class TrialStatus(str, Enum):
+    """Teste grátis no barber-shop, atualizado pelos webhooks de lá."""
+
+    PROVISIONED = "PROVISIONED"  # barbearia criada, dono ainda não entrou
+    ACTIVATED = "ACTIVATED"  # dono definiu a senha / fez login
+    EXPIRING = "EXPIRING"  # faltam 48h
+    EXPIRED = "EXPIRED"  # venceu e saiu do ar
+    CONVERTED = "CONVERTED"  # plano ativado
 
 
 class TechMaturity(str, Enum):
@@ -110,6 +122,10 @@ class BarbershopLead:
     source: LeadSource = LeadSource.SYNTHETIC
     cadence_step: Optional[str] = None  # último toque enviado: D0 | D2 | D5
     next_touch_at: Optional[str] = None  # ISO 8601; None = fora da régua automática
+    email: Optional[str] = None  # login do dono no barber-shop (pedido no WhatsApp)
+    trial_shop_id: Optional[str] = None  # id da barbearia criada no barber-shop
+    trial_status: Optional[TrialStatus] = None
+    trial_ends_at: Optional[str] = None
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     def __post_init__(self):
@@ -119,6 +135,8 @@ class BarbershopLead:
             self.current_system = TechMaturity(self.current_system)
         if isinstance(self.source, str):
             self.source = LeadSource(self.source)
+        if isinstance(self.trial_status, str):
+            self.trial_status = TrialStatus(self.trial_status)
         if not self.slug:
             self.slug = generate_shop_slug(self.shop_name)
         if not self.preview_url:
@@ -132,6 +150,7 @@ class BarbershopLead:
         data["status"] = self.status.value
         data["current_system"] = self.current_system.value
         data["source"] = self.source.value
+        data["trial_status"] = self.trial_status.value if self.trial_status else None
         data["is_synthetic"] = self.is_synthetic
         return data
 

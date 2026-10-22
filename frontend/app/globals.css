@@ -187,6 +187,10 @@ code { font-family: var(--font-mono), monospace; }
 @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
+/* Teste grátis no barber-shop */
+.trial-panel { padding: 14px; background: var(--surface-1); border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
+.trial-status { font-size: 13px; font-weight: 600; }
+
 /* Login e sessão */
 .login-shell { position: relative; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px 16px; }
 .login-card {

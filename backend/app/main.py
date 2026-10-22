@@ -1,10 +1,11 @@
 from __future__ import annotations
+import json
 import logging
 import os
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from typing import Any, AsyncIterator, Dict, Literal, Optional, Tuple
-from fastapi import APIRouter, Depends, FastAPI, HTTPException
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from backend.app.models import Interaction, LeadStatus
@@ -13,19 +14,35 @@ from backend.app.auth import AuthSettings, production_auth_problems, require_ses
 from backend.app.auth import router as auth_router
 from backend.app.agents.scraper import ScraperError, discover_barbershops
 from backend.app.agents.copywriter import generate_outbound_copy
-from backend.app.agents.graph import classify_and_run_graph
+from backend.app.agents.graph import ACTION_PROVISION_TRIAL, classify_and_run_graph
 from backend.app.services.evolution import evolution_client
 from backend.app.services.messaging import outbound_block_reason, send_to_lead
 from backend.app.services.cadence_worker import CadenceConfig, CadenceWorker, schedule_after_touch, stop_cadence
+from backend.app.services import barbershop_platform as platform_module
+from backend.app.services import barbershop_webhook
+from backend.app.services.trial_activation import (
+    ProvisioningError,
+    activate_trial,
+    build_trial_message,
+    trial_block_reason,
+)
 
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
 logger = logging.getLogger(__name__)
 
 
+def integration_problems() -> list:
+    """Integração com o barber-shop ligada exige segredo forte no webhook de volta."""
+    if not platform_module.barbershop_platform.enabled:
+        return []
+    secret = barbershop_webhook.webhook_secret()
+    return [] if len(secret) >= 32 else ["BARBERSHOP_WEBHOOK_SECRET ausente ou com menos de 32 caracteres"]
+
+
 def validate_startup_config() -> None:
     """Com WhatsApp real, configuração de segurança fraca impede a API de subir (fail fast)."""
-    problems = production_auth_problems(AuthSettings.from_env())
+    problems = production_auth_problems(AuthSettings.from_env()) + integration_problems()
     if evolution_client.provider != "MOCK" and problems:
         raise RuntimeError("Configuração insegura para WHATSAPP_PROVIDER real: " + "; ".join(problems))
     for problem in problems:
@@ -69,6 +86,13 @@ class TrialModeRequest(BaseModel):
     trial_mode: Literal["STAND_BY", "AUTO_LINK"]
 
 
+EMAIL_REGEX = r"^[^@\s]+@[^@\s]+\.[^@\s]{2,}$"
+
+
+class ActivateTrialRequest(BaseModel):
+    email: Optional[str] = Field(default=None, max_length=254, pattern=EMAIL_REGEX)
+
+
 class SimulatedInbound(BaseModel):
     phone: str = Field(min_length=8)
     message: str = Field(min_length=1, max_length=2000)
@@ -109,10 +133,29 @@ async def handle_inbound(phone: str, text: str) -> dict:
         )
     )
 
+    if result["action"] == ACTION_PROVISION_TRIAL:
+        result["reply"], result["langgraph_node"] = await _provision_from_conversation(lead)
+        await store.save_lead(lead)
+
     delivery = None
     if result["reply"]:
         delivery = await send_to_lead(lead, result["reply"], node=result["langgraph_node"], intent=result["intent"])
     return {"status": "processed", **result, "delivery": delivery, "lead": lead.to_dict()}
+
+
+async def _provision_from_conversation(lead) -> Tuple[str, str]:
+    """Link Automático: libera o teste na hora; se falhar, o lead vai para a fila de liberação manual."""
+    try:
+        trial = await activate_trial(lead)
+        return build_trial_message(lead, trial), lead.langgraph_node
+    except ProvisioningError as exc:
+        logger.warning("Teste grátis de %s ficou pendente: %s", lead.shop_name, exc)
+        lead.langgraph_node = "5.TrialActivator:PendingManual"
+        reply = (
+            f"Show, anotei o e-mail {lead.email}! Tô liberando a página da {lead.shop_name} "
+            "e te mando o link aqui em instantes."
+        )
+        return reply, lead.langgraph_node
 
 
 @app.get("/health")
@@ -127,6 +170,35 @@ async def whatsapp_webhook(payload: Dict[str, Any]) -> dict:
     if from_me or not phone or not text:
         return {"status": "ignored", "reason": "evento sem mensagem recebida"}
     return await handle_inbound(phone, text)
+
+
+@app.post("/webhook/barbershop")
+async def barbershop_webhook_receiver(request: Request) -> dict:
+    """Ciclo de vida do teste grátis vindo do barber-shop (ativou, vai vencer, venceu, virou cliente)."""
+    raw = await request.body()
+    problem = barbershop_webhook.signature_problem(
+        barbershop_webhook.webhook_secret(),
+        request.headers.get("x-gerente-barber-timestamp"),
+        request.headers.get("x-gerente-barber-signature"),
+        raw,
+    )
+    if problem:
+        raise HTTPException(status_code=401, detail=f"Webhook do barber-shop recusado: {problem}")
+
+    try:
+        payload = json.loads(raw)
+        event, shop = payload["event"], payload["shop"]
+    except (ValueError, KeyError, TypeError):
+        raise HTTPException(status_code=400, detail="Corpo do webhook inválido")
+
+    lead = await store.get_lead(str(shop.get("externalLeadId") or ""))
+    if not lead:
+        return {"status": "ignored", "reason": "lead não encontrado"}
+    if not barbershop_webhook.apply_event(lead, event, shop):
+        return {"status": "ignored", "reason": f"evento desconhecido: {event}"}
+    await store.save_lead(lead)
+    logger.info("barber-shop: %s para %s", event, lead.shop_name)
+    return {"status": "processed", "event": event, "lead": lead.to_dict()}
 
 
 @api.post("/simulator/inbound")
@@ -203,9 +275,37 @@ async def send_d0(lead_id: str) -> dict:
     return {"message": text, "delivery": delivery, "lead": lead.to_dict()}
 
 
+@api.post("/leads/{lead_id}/activate-trial")
+async def activate_trial_endpoint(lead_id: str, body: ActivateTrialRequest) -> dict:
+    """Stand-by VIP: um humano libera o teste pelo painel e o link vai pelo WhatsApp."""
+    lead = await store.get_lead(lead_id)
+    if not lead:
+        raise HTTPException(status_code=404, detail="Lead não encontrado")
+    if body.email:
+        lead.email = body.email.strip().lower()
+
+    block_reason = trial_block_reason(lead)
+    if block_reason:
+        raise HTTPException(status_code=409, detail=block_reason)
+    try:
+        trial = await activate_trial(lead)
+    except ProvisioningError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+
+    stop_cadence(lead)
+    await store.save_lead(lead)
+    message = build_trial_message(lead, trial)
+    delivery = await send_to_lead(lead, message, node=lead.langgraph_node, intent="TRIAL_ACTIVATED")
+    return {"trial": {"url": trial.url, "created": trial.created}, "message": message, "delivery": delivery, "lead": lead.to_dict()}
+
+
 @api.get("/metrics")
 async def metrics() -> dict:
-    return {**await store.compute_metrics(), "whatsapp_provider": evolution_client.provider}
+    return {
+        **await store.compute_metrics(),
+        "whatsapp_provider": evolution_client.provider,
+        "barbershop_integration": platform_module.barbershop_platform.enabled,
+    }
 
 
 @api.post("/settings/trial-mode")

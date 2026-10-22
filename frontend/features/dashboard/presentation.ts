@@ -1,4 +1,4 @@
-import type { Lead, LeadStatus, ObjectionType } from "./types";
+import type { Lead, LeadStatus, ObjectionType, TrialStatus } from "./types";
 
 export type Tone = "danger" | "brand" | "success" | "muted";
 
@@ -42,17 +42,30 @@ export const OBJECTION_LABELS: Record<ObjectionType, string> = {
   CONCORRENTE: "Já usa concorrente",
 };
 
+export const TRIAL_STATUS_LABELS: Record<TrialStatus, string> = {
+  PROVISIONED: "Página criada, aguardando o dono entrar",
+  ACTIVATED: "Dono já entrou no painel",
+  EXPIRING: "Teste acaba em menos de 48h",
+  EXPIRED: "Teste vencido (página fora do ar)",
+  CONVERTED: "Plano ativado",
+};
+
 /** Linha de destaque do card: o sinal mais relevante para o próximo passo do SDR. */
 export function leadSignal(lead: Lead): { text: string; tone: Tone } {
   switch (lead.status) {
     case "DO_NOT_CONTACT":
       return { text: "⛔ Pediu para não ser contatado", tone: "muted" };
     case "TRIAL_STARTED":
-      return { text: "✅ Link do teste 7 dias enviado", tone: "success" };
+      if (lead.trial_status === "EXPIRED") return { text: "⌛ Teste vencido", tone: "danger" };
+      if (lead.trial_status === "EXPIRING") return { text: "⏳ Teste acaba em 48h", tone: "brand" };
+      if (lead.trial_status === "ACTIVATED") return { text: "✅ Dono já entrou no painel", tone: "success" };
+      return { text: "✅ Teste liberado, aguardando o dono entrar", tone: "success" };
     case "CONVERTED":
       return { text: "🏆 Cliente convertido", tone: "success" };
     case "INTERESTED":
-      return { text: "⭐ Fila VIP (Stand-by)", tone: "success" };
+      return lead.email
+        ? { text: "⭐ Pronto para liberar o teste", tone: "success" }
+        : { text: "✉️ Aguardando o e-mail do dono", tone: "brand" };
     case "OBJECTION_RAISED":
       return {
         text: `💬 Objeção: "${lead.last_objection_type ? OBJECTION_LABELS[lead.last_objection_type] : "não identificada"}"`,
@@ -94,6 +107,11 @@ export function nextTouchLabel(lead: Lead): string | null {
   if (!lead.next_touch_at || !lead.cadence_step) return null;
   const step = NEXT_STEP[lead.cadence_step];
   return step ? `${step} automático em ${touchFormatter.format(new Date(lead.next_touch_at))}` : null;
+}
+
+/** Lead pronto para um humano liberar o teste pelo painel (Stand-by ou falha no automático). */
+export function canActivateTrial(lead: Lead): boolean {
+  return !lead.trial_shop_id && lead.status !== "DO_NOT_CONTACT" && lead.status !== "CONVERTED";
 }
 
 /** Remove o protocolo para exibir a URL da vitrine como no navegador. */
