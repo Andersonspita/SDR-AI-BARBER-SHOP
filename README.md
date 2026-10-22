@@ -115,6 +115,18 @@ O `NEXT_PUBLIC_API_URL` é embutido no build do painel: se mudar, rode o build d
 - **Fail fast:** com `WHATSAPP_PROVIDER` real, a API não sobe se a senha, os segredos ou o `COOKIE_SECURE` estiverem fracos (veja os comentários do `.env.example`). Em `MOCK`, isso aparece só como aviso no log.
 - **Leads fictícios:** sem `GOOGLE_MAPS_API_KEY`, os leads saem com `source=SYNTHETIC`. Com WhatsApp real, qualquer envio para eles é bloqueado (D0 responde `409`, o worker tira o lead da régua e o simulador do painel fica desligado). Leads antigos do banco foram migrados como fictícios.
 
+## Teste grátis no barber-shop
+
+O teste grátis é uma barbearia de verdade no [barber-shop](https://github.com/Andersonspita/barber-shop), criada pela rota `POST /provisioning/trials` de lá. O contrato completo está em [`docs/integracao-barber-shop.md`](docs/integracao-barber-shop.md).
+
+1. O barbeiro demonstra interesse e o SDR pede o **e-mail** dele, que é o login no painel do barber-shop.
+2. **Link Automático:** ao receber o e-mail, o SDR cria a barbearia (com jornada e os serviços Corte, Barba e Combo) e responde na mesma conversa com o link da vitrine e um link de uso único para o dono criar a senha (72h).
+   **Stand-by VIP:** o lead fica na fila e um humano clica em **Liberar e enviar link** no painel.
+3. O barber-shop avisa o SDR por webhook assinado (`/webhook/barbershop`): o dono entrou, o teste vence em 48h, o teste venceu (a página sai do ar) e o plano foi ativado (o lead vira `CONVERTED`).
+4. Por enquanto, a conversão é manual: quem opera a plataforma clica em **Ativar plano** em `/plataforma` depois de receber o pagamento.
+
+Travas: lead fictício não ganha teste (a não ser com `BARBERSHOP_ALLOW_SYNTHETIC_TRIALS=true`, só para teste local); se o barber-shop falhar, o lead cai na fila de liberação manual e o dono recebe um "te mando o link em instantes".
+
 ## Cadência automática (worker)
 
 O worker roda dentro da API (`CADENCE_WORKER_ENABLED=true`):
@@ -140,6 +152,8 @@ Todas as rotas `/api/*` (exceto `/api/auth/login`) exigem sessão.
 | `POST` | `/webhook/whatsapp` | Evento `messages.upsert` da Evolution (exige `WEBHOOK_SECRET`) |
 | `POST` | `/api/auth/login` · `/api/auth/logout` | Abre e fecha a sessão |
 | `GET` | `/api/auth/me` | E-mail da sessão atual |
+| `POST` | `/api/leads/{id}/activate-trial` | `{email?}`: libera o teste no barber-shop e manda o link no WhatsApp |
+| `POST` | `/webhook/barbershop` | Ciclo de vida do teste vindo do barber-shop (HMAC em `X-Gerente-Barber-Signature`) |
 | `GET` | `/api/metrics` | KPIs do painel |
 | `POST` | `/api/settings/trial-mode` | `{trial_mode: "STAND_BY" \| "AUTO_LINK"}` |
 | `GET` | `/health` | Healthcheck |
@@ -166,6 +180,7 @@ Veja `.env.example` (API) e `frontend/.env.example` (painel). Principais:
 - `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `JWT_SECRET`, `SESSION_TTL_HOURS`, `COOKIE_SECURE`: acesso ao painel.
 - `WEBHOOK_SECRET`: segredo do webhook da Evolution.
 - `GOOGLE_MAPS_API_KEY`: busca real de barbearias (Places API New). Sem ela, os leads são fictícios.
+- `BARBERSHOP_API_URL`, `BARBERSHOP_PROVISIONING_KEY`, `BARBERSHOP_WEBHOOK_SECRET`, `TRIAL_DAYS`, `BARBERSHOP_ALLOW_SYNTHETIC_TRIALS`: integração do teste grátis. `SAAS_BASE_URL` precisa ser igual ao `APP_URL` do barber-shop.
 - `CADENCE_WORKER_ENABLED`, `CADENCE_SEND_HOURS`, `CADENCE_SEND_WEEKDAYS`, `CADENCE_POLL_INTERVAL_SEC`, `ANTIBAN_MIN_DELAY_SEC`, `ANTIBAN_MAX_DELAY_SEC`: worker da cadência.
 
 No Docker, coloque os valores reais em `.env`: o compose lê o `.env.example` e depois o `.env`, que sobrescreve.

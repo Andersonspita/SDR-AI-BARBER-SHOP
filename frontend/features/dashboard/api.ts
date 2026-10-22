@@ -76,6 +76,12 @@ export const sdrApi = {
   getInteractions: (leadId: string) =>
     request<{ interactions: Interaction[] }>(`/api/leads/${encodeURIComponent(leadId)}/interactions`),
   getMetrics: () => request<Metrics>("/api/metrics"),
+  /** Libera o teste grátis no barber-shop e manda o link para o dono no WhatsApp. */
+  activateTrial: (leadId: string, email?: string) =>
+    post<{ trial: { url: string; created: boolean }; lead: Lead }>(
+      `/api/leads/${encodeURIComponent(leadId)}/activate-trial`,
+      email ? { email } : {},
+    ),
   setTrialMode: (trialMode: TrialMode) =>
     post<{ trial_mode: TrialMode }>("/api/settings/trial-mode", { trial_mode: trialMode }),
   /** Simula uma mensagem do barbeiro (só com WHATSAPP_PROVIDER=MOCK; a API recusa com WhatsApp real). */

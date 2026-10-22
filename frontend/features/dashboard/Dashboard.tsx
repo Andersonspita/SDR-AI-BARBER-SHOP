@@ -10,6 +10,7 @@ import { KanbanBoard } from "./components/KanbanBoard";
 import { MetricsRow } from "./components/MetricsRow";
 import { ScraperHero } from "./components/ScraperHero";
 import { StorefrontPreview } from "./components/StorefrontPreview";
+import { TrialPanel } from "./components/TrialPanel";
 import { WhatsAppSimulator } from "./components/WhatsAppSimulator";
 
 type Notice = { tone: "error" | "info"; text: string } | null;
@@ -28,6 +29,7 @@ export function Dashboard({ session }: DashboardProps) {
   const [isSavingMode, setIsSavingMode] = useState(false);
   const [sendingLeadId, setSendingLeadId] = useState<string | null>(null);
   const [isSimulating, setIsSimulating] = useState(false);
+  const [isActivatingTrial, setIsActivatingTrial] = useState(false);
 
   const isMockProvider = metrics?.whatsapp_provider === "MOCK";
   const blockedSyntheticCount = metrics && !isMockProvider ? leads.filter((lead) => lead.is_synthetic).length : 0;
@@ -96,6 +98,23 @@ export function Dashboard({ session }: DashboardProps) {
     }
   };
 
+  /** Liberação manual do teste grátis (Stand-by VIP ou quando o automático falhou). */
+  const handleActivateTrial = async (email: string): Promise<boolean> => {
+    if (!selectedLead) return false;
+    setIsActivatingTrial(true);
+    try {
+      const result = await sdrApi.activateTrial(selectedLead.id, email);
+      setNotice({ tone: "info", text: `Teste liberado: ${result.trial.url}. Link enviado no WhatsApp do dono.` });
+      await afterMutation();
+      return true;
+    } catch (err) {
+      setNotice({ tone: "error", text: errorMessage(err) });
+      return false;
+    } finally {
+      setIsActivatingTrial(false);
+    }
+  };
+
   return (
     <>
       <Header
@@ -154,6 +173,12 @@ export function Dashboard({ session }: DashboardProps) {
           {selectedLead ? (
             <div className="preview-card">
               <StorefrontPreview lead={selectedLead} trialMode={metrics?.trial_mode ?? null} />
+              <TrialPanel
+                lead={selectedLead}
+                isIntegrationEnabled={metrics?.barbershop_integration ?? false}
+                isActivating={isActivatingTrial}
+                onActivate={handleActivateTrial}
+              />
               <WhatsAppSimulator
                 lead={selectedLead}
                 interactions={interactions}

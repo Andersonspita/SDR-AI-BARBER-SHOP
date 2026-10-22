@@ -53,20 +53,37 @@ class TestGraph(unittest.TestCase):
         self.assertIsNone(result["reply"])
         self.assertEqual(lead.status, LeadStatus.DO_NOT_CONTACT)
 
-    def test_interested_stand_by_mode_queues_vip_without_link(self):
-        lead = _make_lead()
-        result = classify_and_run_graph(lead, "Tenho interesse, como funciona?", trial_mode="STAND_BY")
-        self.assertEqual(result["intent"], "INTERESTED")
+    def test_interested_without_email_asks_for_it_in_both_modes(self):
+        for mode in ("STAND_BY", "AUTO_LINK"):
+            lead = _make_lead()
+            result = classify_and_run_graph(lead, "Tenho interesse, como funciona?", trial_mode=mode)
+            self.assertEqual(result["intent"], "INTERESTED")
+            self.assertEqual(lead.status, LeadStatus.INTERESTED)
+            self.assertEqual(result["langgraph_node"], "5.TrialActivator:AwaitingEmail")
+            self.assertIn("e-mail", result["reply"])
+            self.assertIsNone(result["action"])
+
+    def test_interested_stand_by_with_email_queues_vip_without_link(self):
+        lead = _make_lead(email="dono@barbearia.com")
+        result = classify_and_run_graph(lead, "Tenho interesse", trial_mode="STAND_BY")
         self.assertEqual(lead.status, LeadStatus.INTERESTED)
         self.assertNotIn(lead.preview_url, result["reply"])
         self.assertIn("VIP", result["reply"])
+        self.assertIsNone(result["action"])
 
-    def test_interested_auto_link_mode_sends_slug_url(self):
+    def test_email_reply_in_auto_link_requests_provisioning(self):
         lead = _make_lead()
-        result = classify_and_run_graph(lead, "bora, pode mandar", trial_mode="AUTO_LINK")
+        result = classify_and_run_graph(lead, "pode ser, é Marcos.Dono@Gmail.com", trial_mode="AUTO_LINK")
+        self.assertEqual(lead.email, "marcos.dono@gmail.com")
         self.assertEqual(result["intent"], "INTERESTED")
-        self.assertEqual(lead.status, LeadStatus.TRIAL_STARTED)
-        self.assertIn("https://barber-shop.horizonaj.com.br/barbearia-sao-jose-cia", result["reply"])
+        self.assertEqual(result["action"], "PROVISION_TRIAL")
+        self.assertIsNone(result["reply"])
+
+    def test_unsubscribe_with_email_does_not_capture_email(self):
+        lead = _make_lead()
+        result = classify_and_run_graph(lead, "para de mandar mensagem pro dono@x.com", trial_mode="AUTO_LINK")
+        self.assertEqual(result["intent"], "UNSUBSCRIBE")
+        self.assertIsNone(lead.email)
 
     def test_multiple_objections_reply_focuses_on_booking_without_app(self):
         lead = _make_lead()
@@ -98,12 +115,15 @@ class TestApi(unittest.TestCase):
         self.assertEqual(body["lead"]["status"], "INTERESTED")
         self.assertNotIn(self.lead.preview_url, body["reply"])
 
-    def test_webhook_interested_auto_link_after_switching_mode(self):
+    def test_webhook_auto_link_without_integration_falls_back_to_manual(self):
         res = self.client.post("/api/settings/trial-mode", json={"trial_mode": "AUTO_LINK"})
         self.assertEqual(res.status_code, 200)
-        body = self._webhook("quero testar").json()
-        self.assertEqual(body["lead"]["status"], "TRIAL_STARTED")
-        self.assertIn("/barbearia-sao-jose-cia", body["reply"])
+        self.assertIn("e-mail", self._webhook("quero testar").json()["reply"])
+        body = self._webhook("dono@barbearia.com").json()
+        # Sem BARBERSHOP_API_URL o teste não pode ser criado: fica na fila de liberação manual.
+        self.assertEqual(body["lead"]["status"], "INTERESTED")
+        self.assertEqual(body["lead"]["langgraph_node"], "5.TrialActivator:PendingManual")
+        self.assertIn("dono@barbearia.com", body["reply"])
 
     def test_trial_mode_rejects_invalid_value(self):
         res = self.client.post("/api/settings/trial-mode", json={"trial_mode": "WHATEVER"})
