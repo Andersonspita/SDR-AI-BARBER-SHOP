@@ -1,0 +1,99 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: sdr_ai_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-sdr_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-sdr_secret_2026}
+      POSTGRES_DB: ${POSTGRES_DB:-gerente_barber_sdr}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-sdr_admin} -d ${POSTGRES_DB:-gerente_barber_sdr}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: sdr_ai_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # Só sobe com `--profile whatsapp`: no modo padrão (WHATSAPP_PROVIDER=MOCK) a API não precisa dela.
+  evolution-api:
+    image: evoapicloud/evolution-api:v2.3.0
+    container_name: sdr_ai_evolution
+    restart: unless-stopped
+    profiles: ["whatsapp"]
+    ports:
+      - "8080:8080"
+    environment:
+      SERVER_URL: http://localhost:8080
+      AUTHENTICATION_API_KEY: ${EVOLUTION_API_KEY:-gerente-barber-evo-key}
+      # Evolution v2 exige banco próprio: usa um schema separado no mesmo Postgres
+      DATABASE_PROVIDER: postgresql
+      DATABASE_CONNECTION_URI: postgresql://${POSTGRES_USER:-sdr_admin}:${POSTGRES_PASSWORD:-sdr_secret_2026}@postgres:5432/${POSTGRES_DB:-gerente_barber_sdr}?schema=evolution_api
+      CACHE_REDIS_ENABLED: "true"
+      CACHE_REDIS_URI: redis://redis:6379/6
+      CACHE_LOCAL_ENABLED: "false"
+      WEBHOOK_GLOBAL_ENABLED: "true"
+      WEBHOOK_GLOBAL_URL: http://backend:8000/webhook/whatsapp?token=${WEBHOOK_SECRET:-troque-este-segredo-do-webhook}
+      WEBHOOK_EVENTS_MESSAGES_UPSERT: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: sdr_ai_backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env.example
+      - path: .env
+        required: false
+    environment:
+      # Dentro da rede do compose o banco e o Redis atendem pelo nome do serviço
+      DATABASE_URL: postgresql://${POSTGRES_USER:-sdr_admin}:${POSTGRES_PASSWORD:-sdr_secret_2026}@postgres:5432/${POSTGRES_DB:-gerente_barber_sdr}
+      REDIS_URL: redis://redis:6379/0
+      EVOLUTION_BASE_URL: http://evolution-api:8080
+      FRONTEND_ORIGINS: ${FRONTEND_ORIGINS:-http://localhost:${FRONTEND_PORT:-3000}}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    container_name: sdr_ai_frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
+  redis_data:
