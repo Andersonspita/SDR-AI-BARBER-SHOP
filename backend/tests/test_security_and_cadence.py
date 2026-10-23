@@ -343,3 +343,20 @@ class TestCadenceWorker(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestLogRedaction(unittest.TestCase):
+    def test_webhook_token_never_reaches_the_access_log(self):
+        import logging
+        from backend.app.log_redaction import RedactSecretsFilter, redact
+
+        self.assertEqual(redact("/webhook/whatsapp?token=abc123&x=1"), "/webhook/whatsapp?token=***&x=1")
+        self.assertEqual(redact("/a?x=1&apikey=zzz"), "/a?x=1&apikey=***")
+        self.assertEqual(redact("/api/leads?state=BA"), "/api/leads?state=BA")
+
+        # Formato do log de acesso do uvicorn: o caminho vai nos argumentos.
+        record = logging.LogRecord("uvicorn.access", logging.INFO, "", 0, '%s - "%s %s HTTP/%s" %d',
+                                   ("172.28.0.7:1", "POST", "/webhook/whatsapp?token=segredo", "1.1", 200), None)
+        RedactSecretsFilter().filter(record)
+        self.assertNotIn("segredo", record.getMessage())
+        self.assertIn("token=***", record.getMessage())

@@ -8,6 +8,7 @@ from typing import Any, AsyncIterator, Dict, Literal, Optional, Tuple
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from backend.app import log_redaction
 from backend.app.models import Interaction, LeadStatus
 from backend.app.store import store
 from backend.app.auth import AuthSettings, production_auth_problems, require_session, require_webhook_token
@@ -31,6 +32,7 @@ from backend.app.services.trial_activation import (
 
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
+log_redaction.install()
 logger = logging.getLogger(__name__)
 
 

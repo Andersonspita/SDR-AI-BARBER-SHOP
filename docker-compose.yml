@@ -54,6 +54,10 @@ services:
       # Sem isso a Evolution acrescenta "/messages-upsert" ao fim da URL, que cai dentro do ?token= e o
       # webhook passa a ser recusado (401). Só as mensagens recebidas interessam ao SDR.
       WEBHOOK_GLOBAL_WEBHOOK_BY_EVENTS: "false"
+      # Sem WEBHOOKS/LOG/VERBOSE: esses níveis gravam a URL do webhook (com o token) e o conteúdo das
+      # mensagens nos logs do container.
+      LOG_LEVEL: "ERROR,WARN,INFO"
+      LOG_BAILEYS: "error"
       WEBHOOK_EVENTS_MESSAGES_UPSERT: "true"
       WEBHOOK_EVENTS_QRCODE_UPDATED: "false"
       WEBHOOK_EVENTS_CONNECTION_UPDATE: "false"
