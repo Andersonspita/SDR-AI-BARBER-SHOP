@@ -1,0 +1,45 @@
+# Produção na VPS (atrás do proxy com HTTPS). Use junto com o compose base:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# - Banco, Redis, API e painel sem porta publicada (só a rede interna do compose).
+# - Um nginx interno (gateway) publica tudo em UMA porta local, 127.0.0.1:${SDR_HTTP_PORT}:
+#   /api, /webhook e /health -> API; o resto -> painel. O proxy da VPS (painel da iContainer)
+#   só precisa encaminhar o domínio para essa porta, como já é feito com o barber-shop.
+# Requer Docker Compose 2.24.4+ (sintaxe !reset e !override).
+services:
+  postgres:
+    ports: !reset []
+
+  redis:
+    ports: !reset []
+
+  backend:
+    ports: !reset []
+    environment:
+      STORAGE_BACKEND: postgres
+      COOKIE_SECURE: "true"
+      # Painel e API no mesmo domínio: o CORS só precisa aceitar a própria origem.
+      FRONTEND_ORIGINS: ${PUBLIC_URL:?defina PUBLIC_URL no .env}
+
+  frontend:
+    build:
+      args:
+        NEXT_PUBLIC_API_URL: ${PUBLIC_URL:?defina PUBLIC_URL no .env}
+    ports: !reset []
+
+  gateway:
+    image: nginx:1.27-alpine
+    container_name: sdr_ai_gateway
+    restart: unless-stopped
+    volumes:
+      - ./deploy/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "127.0.0.1:${SDR_HTTP_PORT:-8110}:80"
+    depends_on:
+      - backend
+      - frontend
+
+  evolution-api:
+    # Painel da Evolution (QR code) só por túnel SSH: ssh -L 8090:127.0.0.1:8090 root@VPS
+    ports: !override ["127.0.0.1:${EVOLUTION_PORT:-8090}:8080"]
