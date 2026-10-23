@@ -92,5 +92,5 @@ def generate_outbound_copy(lead: BarbershopLead, touchpoint: str = "D0") -> str:
     return (
         f"{greeting}! Vi no perfil da {lead.shop_name} que você agenda direto pelo Whats.\n"
         f"Quanto tempo você perde por dia respondendo cliente enquanto corta cabelo?\n"
-        f"Com o Gerente Barber (a partir de {lead.recommended_plan.get('monthly_anchor', 'R$ 35,00')}/mês) o cliente agenda sozinho 24h e confirma no Whats."
+        f"Com o Gerente Barber (a partir de {lead.recommended_plan.get('monthly_anchor', 'R$ 35,00')}/mês) o cliente agenda sozinho 24h e recebe a confirmação no Whats."
     )
