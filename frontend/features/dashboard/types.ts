@@ -16,7 +16,10 @@ export type TechMaturity = "MANUAL_WHATSAPP" | "COMPETITOR" | "UNKNOWN";
 export type TrialMode = "STAND_BY" | "AUTO_LINK";
 
 /** SYNTHETIC = gerado localmente (telefone inventado): a API bloqueia envio real para ele. */
-export type LeadSource = "SYNTHETIC" | "GOOGLE_PLACES";
+export type LeadSource = "SYNTHETIC" | "GOOGLE_PLACES" | "APIFY_GOOGLE_MAPS" | "CSV_IMPORT";
+
+/** Fonte usada pelo botão de busca (definida pelas chaves configuradas no servidor). */
+export type SearchSource = "GOOGLE_PLACES" | "APIFY" | "SYNTHETIC";
 
 export type CadenceStep = "D0" | "D2" | "D5";
 
@@ -106,12 +109,26 @@ export interface Metrics {
   converted_count: number;
   active_trials_count: number;
   billing_attention_count: number;
+  lead_source: SearchSource;
 }
 
 export interface ScrapeParams {
   state: string;
   city: string;
   neighborhood?: string;
+}
+
+/** Busca concluída (Google/fictícia na hora; Apify ao terminar) ou ainda rodando no Apify. */
+export type ScrapeResult =
+  | { status: "done"; count: number; new: number; leads: Lead[] }
+  | { status: "running"; run_id: string };
+
+export interface ImportResult {
+  imported: number;
+  already_in_funnel: number;
+  duplicates_in_file: number;
+  rejected: { line: number; reason: string }[];
+  leads: Lead[];
 }
 
 export type WebhookResult =

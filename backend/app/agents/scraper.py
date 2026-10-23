@@ -190,13 +190,25 @@ GOOGLE_PLACES_FIELD_MASK = ",".join(
 
 
 class ScraperError(Exception):
-    """Falha ao consultar a fonte real de barbearias (Google Places)."""
+    """Falha ao consultar uma fonte real de barbearias (Google Places, Apify)."""
 
 
-def _phone_from_places(international_phone: Optional[str]) -> Optional[str]:
-    digits = "".join(ch for ch in (international_phone or "") if ch.isdigit())
-    # Só números brasileiros completos: DDI 55 + DDD + 8 ou 9 dígitos.
-    return digits if digits.startswith("55") and len(digits) in (12, 13) else None
+def br_phone_digits(raw_phone: Optional[str]) -> Optional[str]:
+    """
+    Telefone brasileiro só com dígitos e DDI (55 + DDD + 8 ou 9 dígitos), ou None se não for um.
+    Aceita o número com ou sem o 55: "(77) 99911-2233" e "+55 77 99911-2233" viram "5577999112233".
+    """
+    digits = "".join(ch for ch in (raw_phone or "") if ch.isdigit())
+    if (raw_phone or "").strip().startswith("+") and not digits.startswith("55"):
+        return None  # número estrangeiro
+    if digits.startswith("0"):
+        digits = digits.lstrip("0")  # 0 + DDD de discagem interurbana
+    if len(digits) in (10, 11):
+        digits = "55" + digits  # sem DDI: DDD + número
+    if not (digits.startswith("55") and len(digits) in (12, 13)):
+        return None
+    ddd = digits[2:4]
+    return digits if ddd[0] != "0" and ddd[1] != "0" else None
 
 
 async def search_google_places(
@@ -235,7 +247,7 @@ async def search_google_places(
 
     leads: List[BarbershopLead] = []
     for place_data in response.json().get("places", []):
-        phone = _phone_from_places(place_data.get("internationalPhoneNumber"))
+        phone = br_phone_digits(place_data.get("internationalPhoneNumber"))
         name = (place_data.get("displayName") or {}).get("text")
         if not phone or not name:
             continue
@@ -267,10 +279,20 @@ async def discover_barbershops(
     http_client: Optional[httpx.AsyncClient] = None,
 ) -> List[BarbershopLead]:
     """
-    Ponto de entrada do Agente 1: com GOOGLE_MAPS_API_KEY busca barbearias reais; sem a chave
+    Ponto de entrada síncrono do Agente 1: com GOOGLE_MAPS_API_KEY busca barbearias reais; sem a chave
     usa o gerador local, cujos leads saem marcados como SYNTHETIC (bloqueados para WhatsApp real).
+    Com APIFY_TOKEN (e sem a chave do Google) a busca é assíncrona: ver `agents/apify_maps.py`.
     """
     api_key = os.getenv("GOOGLE_MAPS_API_KEY", "").strip()
     if not api_key:
         return scrape_barbershops_by_location(state, city, neighborhood)
     return await search_google_places(state, city, neighborhood, api_key, http_client=http_client)
+
+
+def active_lead_source() -> str:
+    """Fonte usada pelo botão de busca: GOOGLE_PLACES, APIFY ou SYNTHETIC (nessa ordem de preferência)."""
+    if os.getenv("GOOGLE_MAPS_API_KEY", "").strip():
+        return "GOOGLE_PLACES"
+    if os.getenv("APIFY_TOKEN", "").strip():
+        return "APIFY"
+    return "SYNTHETIC"
