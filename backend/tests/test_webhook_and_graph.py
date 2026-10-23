@@ -176,6 +176,17 @@ class TestApi(unittest.TestCase):
         # Mensagem de grupo não é conversa com o lead, mesmo vinda do número dele.
         self.assertEqual(evolution({"remoteJid": "120363000000000000@g.us", "participant": "5577999123456@s.whatsapp.net"})["status"], "ignored")
 
+    def test_webhook_from_another_instance_is_ignored(self):
+        # Ex.: cliente de barbearia respondendo ao número de agendamentos, na mesma Evolution.
+        payload = {
+            "event": "messages.upsert",
+            "instance": "gerente-barber-agendamentos",
+            "data": {"key": {"remoteJid": "5577999123456@s.whatsapp.net", "fromMe": False}, "message": {"conversation": "tenho interesse"}},
+        }
+        body = self.client.post("/webhook/whatsapp", json=payload, headers=WEBHOOK_HEADERS).json()
+        self.assertEqual(body["status"], "ignored")
+        self.assertIn("outro número", body["reason"])
+
     def test_webhook_unknown_phone_is_ignored(self):
         body = self._webhook("oi", phone="5511900000000").json()
         self.assertEqual(body["status"], "ignored")

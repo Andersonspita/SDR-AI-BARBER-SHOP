@@ -194,6 +194,11 @@ async def health() -> dict:
 @app.post("/webhook/whatsapp", dependencies=[Depends(require_webhook_token)])
 async def whatsapp_webhook(payload: Dict[str, Any]) -> dict:
     """Eventos da Evolution API. Sempre 200 para eventos ignorados, para a Evolution não reenviar."""
+    # A mesma Evolution atende outros números (ex.: o de agendamentos do Gerente Barber) e o webhook
+    # global manda tudo para cá: só a conversa do número do SDR é de vendas.
+    instance = payload.get("instance")
+    if isinstance(instance, str) and instance and instance != evolution_client.instance:
+        return {"status": "ignored", "reason": f"mensagem de outro número ({instance})"}
     phone, text, from_me = _extract_inbound(payload)
     if from_me or not phone or not text:
         return {"status": "ignored", "reason": "evento sem mensagem recebida"}
