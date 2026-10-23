@@ -121,13 +121,15 @@ export interface ScrapeParams {
 
 /** Busca concluída (Google/fictícia na hora; Apify ao terminar) ou ainda rodando no Apify. */
 export type ScrapeResult =
-  | { status: "done"; count: number; new: number; leads: Lead[] }
+  | { status: "done"; count: number; new: number; without_whatsapp: number; leads: Lead[] }
   | { status: "running"; run_id: string };
 
 export interface ImportResult {
   imported: number;
   already_in_funnel: number;
   duplicates_in_file: number;
+  /** Números sem conta no WhatsApp, que ficaram de fora. */
+  without_whatsapp: number;
   rejected: { line: number; reason: string }[];
   leads: Lead[];
 }

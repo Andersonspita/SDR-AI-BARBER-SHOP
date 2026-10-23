@@ -74,7 +74,8 @@ export function Dashboard({ session }: DashboardProps) {
         tone: "info",
         text:
           `${result.count} barbearias encontradas em ${params.city}/${params.state}` +
-          (repeated > 0 ? ` (${result.new} novas, ${repeated} já estavam no funil).` : "."),
+          (repeated > 0 ? ` (${result.new} novas, ${repeated} já estavam no funil).` : ".") +
+          (result.without_whatsapp > 0 ? ` ${result.without_whatsapp} ficaram de fora por não ter WhatsApp.` : ""),
       });
       if (result.leads[0]) setSelectedLeadId(result.leads[0].id);
       await refresh();

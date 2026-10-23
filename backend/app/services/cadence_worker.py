@@ -17,7 +17,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Awaitable, Callable, FrozenSet, Optional
 from backend.app.agents.copywriter import generate_outbound_copy
 from backend.app.models import BarbershopLead, LeadStatus
-from backend.app.services.messaging import send_to_lead
+from backend.app.services.messaging import mark_without_whatsapp, send_to_lead
 from backend.app.store import BRT, SDRStore
 
 
@@ -126,6 +126,10 @@ class CadenceWorker:
             stop_cadence(lead)
             await self.store.save_lead(lead)
             return {"status": "blocked", "lead_id": lead.id, "reason": delivery["error"]}
+        if delivery.get("no_whatsapp"):
+            mark_without_whatsapp(lead)
+            await self.store.save_lead(lead)
+            return {"status": "no_whatsapp", "lead_id": lead.id, "reason": delivery["error"]}
         if not delivery["delivered"]:
             lead.next_touch_at = (now + RETRY_AFTER_FAILURE).isoformat()
             await self.store.save_lead(lead)

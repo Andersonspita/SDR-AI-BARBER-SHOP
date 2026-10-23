@@ -81,7 +81,9 @@ export function leadSignal(lead: Lead): { text: string; tone: Tone } {
   if (lead.subscription_status === "PAST_DUE") return { text: "💸 Mensalidade vencida", tone: "danger" };
   switch (lead.status) {
     case "DO_NOT_CONTACT":
-      return { text: "⛔ Pediu para não ser contatado", tone: "muted" };
+      return lead.langgraph_node === "1.Scraper:SemWhatsApp"
+        ? { text: "📵 Número sem WhatsApp", tone: "muted" }
+        : { text: "⛔ Pediu para não ser contatado", tone: "muted" };
     case "TRIAL_STARTED":
       if (lead.trial_status === "EXPIRED") return { text: "⌛ Teste vencido", tone: "danger" };
       if (lead.trial_status === "EXPIRING") return { text: "⏳ Teste acaba em 48h", tone: "brand" };

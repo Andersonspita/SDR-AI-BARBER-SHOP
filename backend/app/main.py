@@ -19,7 +19,7 @@ from backend.app.services.lead_import import ImportFormatError, TEMPLATE_CSV, pa
 from backend.app.agents.copywriter import generate_outbound_copy
 from backend.app.agents.graph import ACTION_PROVISION_TRIAL, classify_and_run_graph
 from backend.app.services.evolution import evolution_client
-from backend.app.services.messaging import outbound_block_reason, send_to_lead
+from backend.app.services.messaging import mark_without_whatsapp, outbound_block_reason, send_to_lead
 from backend.app.services.cadence_worker import CadenceConfig, CadenceWorker, schedule_after_touch, stop_cadence
 from backend.app.services import barbershop_platform as platform_module
 from backend.app.services import barbershop_webhook
@@ -250,14 +250,22 @@ async def simulate_inbound(body: SimulatedInbound) -> dict:
 
 
 async def _save_found(found: list) -> dict:
-    """Salva sem duplicar por telefone; `new` conta só quem ainda não estava no funil."""
+    """
+    Salva sem duplicar por telefone; `new` conta só quem ainda não estava no funil. Com WhatsApp real,
+    números sem conta no WhatsApp (fixo, celular antigo) ficam de fora: nunca receberiam a D0.
+    """
+    with_whatsapp = await evolution_client.numbers_on_whatsapp([lead.phone for lead in found])
+    without_whatsapp = 0
+    if with_whatsapp is not None:
+        without_whatsapp = sum(1 for lead in found if lead.phone not in with_whatsapp)
+        found = [lead for lead in found if lead.phone in with_whatsapp]
     saved = []
     new = 0
     for lead in found:
         stored = await store.upsert_lead(lead)
         new += stored.id == lead.id
         saved.append(stored.to_dict())
-    return {"status": "done", "count": len(saved), "new": new, "leads": saved}
+    return {"status": "done", "count": len(saved), "new": new, "without_whatsapp": without_whatsapp, "leads": saved}
 
 
 @api.post("/leads/scrape")
@@ -305,6 +313,7 @@ async def import_leads(body: ImportCsvRequest) -> dict:
         "imported": result["new"],
         "already_in_funnel": result["count"] - result["new"],
         "duplicates_in_file": parsed.duplicates_in_file,
+        "without_whatsapp": result["without_whatsapp"],
         "rejected": [{"line": p.line, "reason": p.reason} for p in parsed.problems],
         "leads": result["leads"],
     }
@@ -361,6 +370,13 @@ async def send_d0(lead_id: str) -> dict:
 
     text = generate_outbound_copy(lead, touchpoint="D0")
     delivery = await send_to_lead(lead, text, node="3.Cadence:D0")
+    if delivery.get("no_whatsapp"):
+        mark_without_whatsapp(lead)
+        await store.save_lead(lead)
+        raise HTTPException(
+            status_code=422,
+            detail=f"{delivery['error']}: a {lead.shop_name} foi para \"Não contatar\". Tente outro contato dela, se tiver.",
+        )
     if not delivery["delivered"]:
         raise HTTPException(status_code=502, detail=f"Falha no envio WhatsApp: {delivery['error']}")
 

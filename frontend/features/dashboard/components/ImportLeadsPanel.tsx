@@ -138,6 +138,7 @@ export function ImportLeadsPanel({ onImported, onClose }: ImportLeadsPanelProps)
             <strong>{result.imported}</strong> barbearia(s) nova(s) no funil
             {result.already_in_funnel > 0 && <> · {result.already_in_funnel} já estavam</>}
             {result.duplicates_in_file > 0 && <> · {result.duplicates_in_file} repetida(s) na planilha</>}
+            {result.without_whatsapp > 0 && <> · {result.without_whatsapp} sem WhatsApp</>}
             {result.rejected.length > 0 && <> · {result.rejected.length} linha(s) recusada(s)</>}
           </p>
           {result.rejected.length > 0 && (

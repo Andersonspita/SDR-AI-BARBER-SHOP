@@ -3,10 +3,21 @@ import logging
 import os
 import uuid
 from dataclasses import dataclass
+from typing import Optional
 import httpx
 
 
 logger = logging.getLogger(__name__)
+
+NO_WHATSAPP_ERROR = "Esse número não tem WhatsApp"
+
+
+def _says_number_not_on_whatsapp(response: httpx.Response) -> bool:
+    """A Evolution responde 400 com `"exists": false` quando o número não tem conta no WhatsApp."""
+    try:
+        return '"exists":false' in response.text.replace(" ", "")
+    except Exception:  # corpo ilegível: trata como erro comum
+        return False
 
 
 @dataclass
@@ -45,6 +56,15 @@ class EvolutionClient:
                     json={"number": phone, "text": text},
                     headers={"apikey": self.api_key},
                 )
+                if response.status_code == 400 and _says_number_not_on_whatsapp(response):
+                    logger.warning("Número %s não tem WhatsApp; mensagem não enviada.", phone)
+                    return {
+                        "delivered": False,
+                        "provider": self.provider,
+                        "message_id": None,
+                        "error": NO_WHATSAPP_ERROR,
+                        "no_whatsapp": True,
+                    }
                 response.raise_for_status()
                 body = response.json()
         except (httpx.HTTPError, ValueError) as exc:
@@ -53,6 +73,24 @@ class EvolutionClient:
 
         message_id = (body.get("key") or {}).get("id") if isinstance(body, dict) else None
         return {"delivered": True, "provider": self.provider, "message_id": message_id, "error": None}
+
+    async def numbers_on_whatsapp(self, phones: list[str]) -> Optional[set[str]]:
+        """
+        Quais telefones têm WhatsApp (consulta, não envia nada). Em MOCK, todos. Se a Evolution não
+        responder, devolve None: quem chama mantém os números, e o envio é que vai dizer.
+        """
+        if self.provider == "MOCK" or not phones:
+            return set(phones)
+        url = f"{self.base_url}/chat/whatsappNumbers/{self.instance}"
+        try:
+            async with httpx.AsyncClient(timeout=max(self.timeout_sec, 30.0)) as client:
+                response = await client.post(url, json={"numbers": phones}, headers={"apikey": self.api_key})
+                response.raise_for_status()
+                rows = response.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            logger.warning("Não deu para conferir quais números têm WhatsApp: %s", exc)
+            return None
+        return {str(row.get("number")) for row in rows if isinstance(row, dict) and row.get("exists")}
 
 
 evolution_client = EvolutionClient.from_env()

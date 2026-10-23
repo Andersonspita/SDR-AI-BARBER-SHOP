@@ -1,7 +1,7 @@
 from __future__ import annotations
 import logging
 from typing import Optional
-from backend.app.models import BarbershopLead, Interaction
+from backend.app.models import BarbershopLead, Interaction, LeadStatus
 from backend.app.services.evolution import evolution_client
 from backend.app.store import store
 
@@ -23,6 +23,16 @@ def outbound_block_reason(lead: BarbershopLead, provider: Optional[str] = None) 
     if active_provider != "MOCK" and lead.is_synthetic:
         return SYNTHETIC_BLOCK_REASON
     return None
+
+
+NO_WHATSAPP_NODE = "1.Scraper:SemWhatsApp"
+
+
+def mark_without_whatsapp(lead: BarbershopLead) -> None:
+    """Número sem conta no WhatsApp: sai do funil de vez (nada de nova tentativa a cada 30 min)."""
+    lead.status = LeadStatus.DO_NOT_CONTACT
+    lead.langgraph_node = NO_WHATSAPP_NODE
+    lead.next_touch_at = None
 
 
 async def send_to_lead(lead: BarbershopLead, text: str, node: str, intent: Optional[str] = None) -> dict:
