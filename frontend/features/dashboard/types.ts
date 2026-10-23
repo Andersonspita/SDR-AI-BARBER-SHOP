@@ -24,7 +24,8 @@ export type CadenceStep = "D0" | "D2" | "D5";
 export type TrialStatus = "PROVISIONED" | "ACTIVATED" | "EXPIRING" | "EXPIRED" | "CONVERTED";
 
 /** Assinatura no barber-shop (espelho dos webhooks de lá). */
-export type SubscriptionStatus = "TRIAL" | "ACTIVE" | "PAST_DUE" | "SUSPENDED" | "EXPIRED";
+/** BLOCKED = agendamento online pausado; SUSPENDED e EXPIRED vêm da cobrança antiga do barber-shop. */
+export type SubscriptionStatus = "TRIAL" | "ACTIVE" | "PAST_DUE" | "BLOCKED" | "EXEMPT" | "SUSPENDED" | "EXPIRED";
 
 export type ObjectionType = "SEM_TEMPO" | "CLIENTES_VELHOS" | "CADERNO" | "CONCORRENTE";
 

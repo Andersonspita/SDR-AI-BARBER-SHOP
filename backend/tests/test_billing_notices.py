@@ -63,12 +63,17 @@ class NoticeCase(TrialApiCase):
 
 
 class TestTrialNotices(NoticeCase):
-    def test_expiring_sends_subscribe_link_in_brasilia_time(self):
-        self.notify("trial.expiring")
+    def test_expiring_sends_subscribe_link_with_the_trial_day(self):
+        # O barber-shop manda o fim do teste como dia puro (meia-noite UTC).
+        self.notify("trial.expiring", trialEndsAt="2026-10-29T00:00:00.000Z")
         [message] = self.outbound()
         self.assertIn(f"{SHOP_URL}/dashboard/assinatura", message)
-        self.assertIn("29/10 às 10:00", message)  # 13:00 UTC = 10:00 em Brasília
+        self.assertIn("acaba em 29/10.", message)  # não 28/10 às 21:00
         self.assertEqual(self.saved().trial_status, TrialStatus.EXPIRING)
+
+    def test_timestamp_with_time_is_shown_in_brasilia(self):
+        self.notify("trial.expiring")
+        self.assertIn("29/10 às 10:00", self.outbound()[-1])  # 13:00 UTC = 10:00 em Brasília
 
     def test_resent_event_is_not_sent_twice(self):
         self.notify("trial.expiring", event_id="evt-repetido")
@@ -83,8 +88,12 @@ class TestTrialNotices(NoticeCase):
         self.assertIn("/dashboard/assinatura", reply["reply"])
 
     def test_expired_then_owner_wants_to_pay_without_invoice_flags_the_panel(self):
-        self.notify("trial.expired", subscriptionStatus="EXPIRED")
-        self.assertIn("terminou", self.outbound()[-1])
+        self.notify("trial.expired", subscriptionStatus="PAST_DUE", suspendsAt="2026-11-06T00:00:00.000Z")
+        message = self.outbound()[-1]
+        self.assertIn("terminou", message)
+        self.assertIn("agendamento online fica pausado", message)
+        self.assertIn("06/11", message)
+        self.assertNotIn("saiu do ar", message)
 
         reply = self.owner_says("quero continuar sim")
         self.assertEqual(reply["langgraph_node"], "5.Billing:NeedsCharge")
@@ -93,7 +102,7 @@ class TestTrialNotices(NoticeCase):
         self.assertEqual(self.client.get("/api/metrics").json()["billing_attention_count"], 1)
 
         # A plataforma gera a cobrança: o link chega pela conversa e o alerta some.
-        self.notify("subscription.invoice_created", subscriptionStatus="EXPIRED", invoiceUrl="https://asaas.test/i/1")
+        self.notify("subscription.invoice_created", subscriptionStatus="PAST_DUE", invoiceUrl="https://asaas.test/i/1")
         self.assertIn("https://asaas.test/i/1", self.outbound()[-1])
         self.assertFalse(self.saved().needs_billing_help)
 
@@ -125,8 +134,12 @@ class TestBillingNotices(NoticeCase):
         reply = self.owner_says("vou pagar hoje")
         self.assertIn("https://asaas.test/i/2", reply["reply"])
 
-        self.notify("subscription.suspended", subscriptionStatus="SUSPENDED", invoiceUrl="https://asaas.test/i/2")
-        self.assertIn("saiu do ar", self.outbound()[-1])
+        self.notify("subscription.suspended", subscriptionStatus="BLOCKED", invoiceUrl="https://asaas.test/i/2")
+        self.assertIn("agendamento online da Barbearia São José & Cia foi pausado", self.outbound()[-1])
+        self.assertEqual(self.client.get("/api/metrics").json()["billing_attention_count"], 1)
+
+        reply = self.owner_says("como faço pra voltar?")
+        self.assertEqual(reply["langgraph_node"], "5.Billing:InvoiceSent")
 
         self.notify("subscription.reactivated", subscriptionStatus="ACTIVE")
         lead = self.saved()

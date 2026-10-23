@@ -46,7 +46,7 @@ export const TRIAL_STATUS_LABELS: Record<TrialStatus, string> = {
   PROVISIONED: "Página criada, aguardando o dono entrar",
   ACTIVATED: "Dono já entrou no painel",
   EXPIRING: "Teste acaba em menos de 48h",
-  EXPIRED: "Teste vencido (página fora do ar)",
+  EXPIRED: "Teste vencido (1ª mensalidade em aberto)",
   CONVERTED: "Plano ativado",
 };
 
@@ -54,6 +54,8 @@ export const SUBSCRIPTION_LABELS: Record<SubscriptionStatus, string> = {
   TRIAL: "em teste grátis",
   ACTIVE: "em dia",
   PAST_DUE: "mensalidade vencida",
+  BLOCKED: "agendamento online pausado por falta de pagamento",
+  EXEMPT: "cortesia (sem mensalidade)",
   SUSPENDED: "suspensa por falta de pagamento",
   EXPIRED: "teste vencido",
 };
@@ -63,12 +65,18 @@ export const PLAN_LABELS: Record<string, string> = {
   SQUAD: "Squad",
   PRO: "Pro",
   EMPIRE: "Empire",
+  solo: "Solo",
+  essencial: "Essencial",
+  profissional: "Profissional",
+  premium: "Premium",
+  rede: "Rede",
 };
 
 /** Linha de destaque do card: o sinal mais relevante para o próximo passo do SDR. */
 export function leadSignal(lead: Lead): { text: string; tone: Tone } {
   // Pendências de cobrança passam na frente: são dinheiro parado.
-  if (lead.needs_billing_help) return { text: "🧾 Dono quer pagar: gerar cobrança", tone: "danger" };
+  if (lead.needs_billing_help) return { text: "🧾 Dono quer pagar: ligar pagamento online", tone: "danger" };
+  if (lead.subscription_status === "BLOCKED") return { text: "⛔ Agendamento online pausado", tone: "danger" };
   if (lead.subscription_status === "SUSPENDED") return { text: "⛔ Suspensa por falta de pagamento", tone: "danger" };
   if (lead.subscription_status === "PAST_DUE") return { text: "💸 Mensalidade vencida", tone: "danger" };
   switch (lead.status) {

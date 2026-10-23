@@ -96,13 +96,15 @@ O SDR recusa assinaturas inválidas e avisos com mais de 5 minutos (proteção c
 | Evento | Quando | Efeito no SDR | Mensagem ao dono (pela conversa do SDR) |
 |---|---|---|---|
 | `trial.activated` | O dono definiu a senha ou fez o primeiro login | `trial_status = ACTIVATED` | — |
-| `trial.expiring` | Faltam 48h | `trial_status = EXPIRING` | Data do fim + link para assinar (`subscribeUrl`) |
-| `trial.expired` | O teste venceu: barbearia `EXPIRED` e fora do ar, sem apagar dados | `trial_status = EXPIRED` | "Terminou, ficou tudo guardado; responda que eu gero a cobrança" |
-| `subscription.invoice_created` | A plataforma gerou a cobrança (**Gerar cobrança**) | fatura salva no lead | Link da fatura |
-| `subscription.activated` | 1º pagamento confirmado (ou **Ativar sem cobrança**) | `trial_status = CONVERTED` e lead `CONVERTED` | "Pagamento confirmado" |
-| `subscription.past_due` | Mensalidade vencida | `subscription_status = PAST_DUE` | Link da fatura + quando sai do ar (`suspendsAt`) |
-| `subscription.suspended` | Passou da tolerância sem pagar | `SUSPENDED` | "Saiu do ar; pague e volta sozinha" + fatura |
-| `subscription.reactivated` | Pagamento atrasado caiu | `ACTIVE` | "Pagamento recebido, em dia" |
+| `trial.expiring` | Faltam 48h para o fim do teste | `trial_status = EXPIRING` | Dia do fim + como pagar a 1ª mensalidade (`invoiceUrl` ou `subscribeUrl`) |
+| `subscription.invoice_created` | Fatura gerada (sozinha, dias antes do vencimento, ou pelo operador) | fatura salva no lead | Link de pagamento do Asaas, ou a tela de Assinatura do painel |
+| `trial.expired` | A 1ª fatura (que vence no fim do teste) ficou em aberto | `trial_status = EXPIRED`, `subscription_status = PAST_DUE` | "Terminou e a 1ª mensalidade venceu" + como pagar + quando o agendamento pausa (`suspendsAt`) |
+| `subscription.activated` | 1º pagamento (Asaas ou baixa manual) | `trial_status = CONVERTED` e lead `CONVERTED` | "Pagamento confirmado" |
+| `subscription.past_due` | Mensalidade seguinte vencida | `subscription_status = PAST_DUE` | Como pagar + quando o agendamento pausa (`suspendsAt`) |
+| `subscription.suspended` | Passou da tolerância sem pagar | `BLOCKED` | "Agendamento online pausado; página, agenda e painel seguem" + como pagar |
+| `subscription.reactivated` | Pagou o atraso | `ACTIVE` | "Em dia, agendamento liberado" |
+
+A barbearia **nunca sai do ar** por atraso: o barber-shop só pausa o agendamento online dos clientes. `subscriptionStatus` chega como `TRIAL`, `ACTIVE`, `PAST_DUE`, `BLOCKED` ou `EXEMPT` (cortesia); `SUSPENDED` e `EXPIRED` só aparecem em leads de antes da cobrança unificada. `trialEndsAt` e `suspendsAt` são dias (meia-noite UTC) e as mensagens mostram só o dia.
 
 Só barbearias que vieram do SDR (com `externalLeadId`) geram avisos. **Para essas, o barber-shop não manda os próprios avisos pelo WhatsApp da plataforma**: o SDR manda na conversa que já tem com o dono, e a resposta dele cai no grafo do SDR. Leads descadastrados (`DO_NOT_CONTACT`) têm a situação atualizada, mas não recebem mensagem.
 
@@ -110,7 +112,7 @@ Só barbearias que vieram do SDR (com `externalLeadId`) geram avisos. **Para ess
 
 Para quem já tem barbearia (`trial_shop_id`), interesse ou resposta neutra não recebe mais o discurso de venda:
 
-- **Deve pagar** (teste vencido, mensalidade vencida, suspensa): com fatura em aberto, o SDR manda o link. Sem fatura, responde "vou gerar a cobrança" e marca `needs_billing_help`. O painel mostra o alerta **Gerar cobrança em /plataforma** (precisa do CPF/CNPJ); quando a cobrança é gerada, o link chega na conversa sozinho (`subscription.invoice_created`) e o alerta some.
+- **Deve pagar** (mensalidade vencida ou agendamento pausado): com link de pagamento, o SDR manda o link. Sem link (pagamento online ainda não ligado), responde "vou gerar a cobrança" e marca `needs_billing_help`. O painel mostra o alerta; em `/plataforma` → **Assinatura**, ligue o pagamento online com o CPF/CNPJ do dono (o link chega na conversa sozinho) ou dê a baixa manual se ele pagou por fora.
 - **Em teste, já usando o painel:** link para assinar (`subscribeUrl`).
 - **Em dia:** atendimento ("qualquer dúvida, me chama").
 
