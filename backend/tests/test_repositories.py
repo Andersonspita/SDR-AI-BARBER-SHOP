@@ -61,7 +61,7 @@ class RepositoryContract:
         self.assertEqual(loaded.last_objection_type, "CADERNO")
         self.assertEqual(loaded.langgraph_node, "4.ObjectionRAG")
         self.assertEqual(loaded.slug, "barbearia-sao-jose-cia")
-        self.assertEqual(loaded.recommended_plan["plan_name"], "Plano Duo/Squad")
+        self.assertEqual(loaded.recommended_plan["plan_name"], "Plano Essencial")
 
     async def test_get_lead_unknown_or_invalid_id_returns_none(self):
         self.assertIsNone(await self.repo.get_lead("nope"))

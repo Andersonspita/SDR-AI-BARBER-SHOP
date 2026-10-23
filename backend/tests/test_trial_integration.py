@@ -78,7 +78,7 @@ class TestPlatformClient(unittest.TestCase):
     def test_payload_maps_plan_and_owner(self):
         payload = self.client.build_payload(self.lead)
         self.assertEqual(payload["externalLeadId"], self.lead.id)
-        self.assertEqual(payload["plan"], "SQUAD")
+        self.assertEqual(payload["plan"], "essencial")  # 3 cadeiras
         self.assertEqual(payload["slug"], "barbearia-sao-jose-cia")
         self.assertEqual(payload["trialDays"], 10)
         self.assertEqual((payload["adminName"], payload["adminEmail"]), ("Marcos Oliveira", "dono@x.com"))

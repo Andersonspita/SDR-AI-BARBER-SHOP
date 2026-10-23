@@ -35,6 +35,7 @@ export type ObjectionType = "SEM_TEMPO" | "CLIENTES_VELHOS" | "CADERNO" | "CONCO
 export type Intent = "UNSUBSCRIBE" | "OBJECTION_RAISED" | "INTERESTED" | "NEUTRAL" | "BLOCKED";
 
 export interface RecommendedPlan {
+  plan_code: string;
   plan_name: string;
   price_range: string;
   monthly_anchor: string;

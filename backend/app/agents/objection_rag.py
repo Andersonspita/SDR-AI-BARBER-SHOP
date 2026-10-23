@@ -38,8 +38,8 @@ OBJECTION_KNOWLEDGE_BASE = [
             r"publico (mais )?velho",
         ],
         "response": (
-            "Pros clientes mais velhos funciona igual: chega a confirmação no WhatsApp "
-            "e eles confirmam com 1 clique."
+            "Pros clientes mais velhos funciona igual: a confirmação e o lembrete chegam no "
+            "WhatsApp, sem baixar app. E quem prefere ligar, você marca na agenda em segundos."
         ),
     },
     {
@@ -63,8 +63,8 @@ OBJECTION_KNOWLEDGE_BASE = [
             *[rf"\b{re.escape(sig)}\b" for sig in COMPETITOR_SIGNATURES],
         ],
         "response": (
-            "Comparando com o {competitor}: a mensalidade sai menor, o lembrete no WhatsApp "
-            "já vem incluso e o split não tem taxa abusiva."
+            "Dá pra comparar com o {competitor} sem risco: são 7 dias grátis, o lembrete no "
+            "WhatsApp já vem incluso e os planos começam em R$ 35/mês."
         ),
     },
 ]

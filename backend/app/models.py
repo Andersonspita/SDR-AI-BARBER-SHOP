@@ -67,35 +67,32 @@ def get_shop_initials(shop_name: str) -> str:
     return (words[0][0] + words[1][0]).upper()
 
 
+# Tabela de planos do Gerente Barber (barber-shop, tabela `plans`), por profissionais ativos.
+# Os preços são editáveis lá em /plataforma -> Planos e preços: mudou lá, atualize aqui, porque o
+# valor entra na copy do D0. `plan_code` é o código enviado no provisionamento do teste grátis.
+PLAN_TIERS = (
+    # (até N profissionais, código, nome, mensalidade, foco do pitch)
+    (1, "solo", "Plano Solo", "R$ 35,00", "agendamento online 24h e fim da agenda no caderno"),
+    (3, "essencial", "Plano Essencial", "R$ 89,90", "agenda da equipe num lugar só e lembrete no WhatsApp contra falta"),
+    (6, "profissional", "Plano Profissional", "R$ 149,90", "comissão de cada profissional calculada no financeiro e menos faltas"),
+    (10, "premium", "Plano Premium", "R$ 219,90", "financeiro da casa inteira, encaixes e lista de espera"),
+)
+LARGE_TEAM_PLAN = ("rede", "Plano Rede", "R$ 219,90", "equipe grande: 10 profissionais inclusos + R$ 19,90 por extra")
+
+
 def recommend_plan(estimated_barbers: int) -> dict:
-    """Retorna o plano e foco de pitch segundo a Matriz de Preços e Segmentação."""
+    """Plano do Gerente Barber que comporta a equipe e o foco do pitch para esse porte."""
     chairs = max(1, int(estimated_barbers or 1))
-    if chairs == 1:
-        return {
-            "plan_name": "Plano Solo",
-            "price_range": "R$ 49,90 a R$ 59,90/mês",
-            "monthly_anchor": "R$ 49,90",
-            "pitch_focus": "agendamento 24/7 e fim do caderno/agenda manual",
-        }
-    if 2 <= chairs <= 4:
-        return {
-            "plan_name": "Plano Duo/Squad",
-            "price_range": "R$ 99,90 a R$ 129,90/mês",
-            "monthly_anchor": "R$ 99,90",
-            "pitch_focus": "cálculo de comissão sem brigas no final do mês e controle de estoque",
-        }
-    if 5 <= chairs <= 9:
-        return {
-            "plan_name": "Plano Club/Pro",
-            "price_range": "R$ 179,90 a R$ 219,90/mês",
-            "monthly_anchor": "R$ 179,90",
-            "pitch_focus": "painel financeiro DRE, redução de no-show e clube de assinaturas",
-        }
+    code, name, price, focus = next(
+        ((code, name, price, focus) for limit, code, name, price, focus in PLAN_TIERS if chairs <= limit),
+        LARGE_TEAM_PLAN,
+    )
     return {
-        "plan_name": "Plano Empire",
-        "price_range": "R$ 299,90 a R$ 389,90/mês",
-        "monthly_anchor": "R$ 299,90",
-        "pitch_focus": "split de pagamento automático (Lei do Salão Parceiro) e gestão por unidade",
+        "plan_code": code,
+        "plan_name": name,
+        "price_range": f"{price}/mês" if code != "rede" else f"{price}/mês + R$ 19,90 por profissional extra",
+        "monthly_anchor": price,
+        "pitch_focus": focus,
     }
 
 

@@ -15,13 +15,6 @@ from backend.app.models import BarbershopLead
 
 logger = logging.getLogger(__name__)
 
-# Nome do plano no SDR (models.recommend_plan) -> código no barber-shop
-PLAN_CODES = {
-    "Plano Solo": "SOLO",
-    "Plano Duo/Squad": "SQUAD",
-    "Plano Club/Pro": "PRO",
-    "Plano Empire": "EMPIRE",
-}
 
 
 class ProvisioningError(Exception):
@@ -66,7 +59,8 @@ class BarbershopPlatformClient:
             "shopName": lead.shop_name,
             "slug": lead.slug,
             "city": lead.city,
-            "plan": PLAN_CODES.get(lead.recommended_plan.get("plan_name", ""), "SOLO"),
+            # Código da tabela de planos do barber-shop (solo, essencial...); ver models.recommend_plan.
+            "plan": lead.recommended_plan.get("plan_code", "solo"),
             "trialDays": self.trial_days,
             "adminName": lead.owner_name or f"Responsável {lead.shop_name}",
             "adminEmail": lead.email,
