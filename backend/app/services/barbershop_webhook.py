@@ -1,5 +1,8 @@
 """
-Recebe o ciclo de vida do teste grátis enviado pelo barber-shop (`/webhook/barbershop`).
+Recebe o ciclo de vida do teste grátis e da assinatura enviado pelo barber-shop (`/webhook/barbershop`).
+
+Para barbearias que vieram do SDR, o barber-shop não avisa o dono pelo WhatsApp dele: cada evento
+chega aqui e vira uma mensagem na conversa que o SDR já tem com o dono (que trata a resposta).
 
 Assinatura: HMAC-SHA256 de `"{timestamp}.{corpo}"` com `BARBERSHOP_WEBHOOK_SECRET`, nos headers
 `X-Gerente-Barber-Timestamp` e `X-Gerente-Barber-Signature: sha256=<hex>`. Avisos com mais de
@@ -10,9 +13,11 @@ import hashlib
 import hmac
 import os
 import time
+from dataclasses import dataclass
 from datetime import datetime
 from typing import Optional
 from backend.app.models import BarbershopLead, LeadStatus, TrialStatus
+from backend.app.store import BRT
 
 
 MAX_CLOCK_SKEW_SEC = 300
@@ -23,6 +28,17 @@ EVENT_TO_TRIAL_STATUS = {
     "trial.expired": TrialStatus.EXPIRED,
     "subscription.activated": TrialStatus.CONVERTED,
 }
+
+# Eventos de cobrança: não mudam o teste, só a situação da assinatura.
+BILLING_EVENTS = {
+    "subscription.invoice_created",
+    "subscription.past_due",
+    "subscription.suspended",
+    "subscription.reactivated",
+}
+
+# Fatura gerada ou pagamento resolvido: ninguém mais precisa gerar cobrança à mão.
+EVENTS_THAT_RESOLVE_BILLING_HELP = {"subscription.invoice_created", "subscription.activated", "subscription.reactivated"}
 
 
 def webhook_secret() -> str:
@@ -52,19 +68,95 @@ def signature_problem(
     return None
 
 
-def apply_event(lead: BarbershopLead, event: str, shop: dict) -> bool:
-    """Atualiza o lead conforme o aviso. Devolve False para eventos desconhecidos."""
-    trial_status = EVENT_TO_TRIAL_STATUS.get(event)
-    if trial_status is None:
-        return False
+@dataclass(frozen=True)
+class EventOutcome:
+    known: bool
+    # Mensagem para o dono na conversa do SDR (None = evento sem aviso, ex.: dono entrou no painel)
+    message: Optional[str] = None
 
-    lead.trial_status = trial_status
+
+def _parse_iso(value: Optional[str]) -> Optional[datetime]:
+    return datetime.fromisoformat(value.replace("Z", "+00:00")) if value else None
+
+
+def _when(value: Optional[str]) -> str:
+    moment = _parse_iso(value)
+    return moment.astimezone(BRT).strftime("%d/%m às %H:%M") if moment else "em breve"
+
+
+def _sync_shop(lead: BarbershopLead, shop: dict) -> None:
+    """Copia para o lead a situação da barbearia que vem em todo aviso."""
     lead.trial_shop_id = shop.get("id") or lead.trial_shop_id
     if shop.get("slug"):
         lead.slug = shop["slug"]
+    if shop.get("url"):
+        lead.preview_url = shop["url"]
     if shop.get("trialEndsAt"):
-        lead.trial_ends_at = datetime.fromisoformat(shop["trialEndsAt"].replace("Z", "+00:00")).isoformat()
-    lead.langgraph_node = f"5.TrialActivator:{trial_status.value.title()}"
+        lead.trial_ends_at = _parse_iso(shop["trialEndsAt"]).isoformat()
+    lead.subscription_status = shop.get("subscriptionStatus") or lead.subscription_status
+    lead.plan_code = shop.get("plan") or lead.plan_code
+    lead.subscribe_url = shop.get("subscribeUrl") or lead.subscribe_url
+    # Fatura e prazo de suspensão refletem o estado atual: ausentes = não há.
+    lead.invoice_url = shop.get("invoiceUrl")
+    suspends_at = _parse_iso(shop.get("suspendsAt"))
+    lead.suspends_at = suspends_at.isoformat() if suspends_at else None
+
+
+def build_notice(event: str, lead: BarbershopLead, shop: dict) -> Optional[str]:
+    """Texto do aviso ao dono, no mesmo tom da conversa de venda."""
+    name = shop.get("name") or lead.shop_name
+    invoice = shop.get("invoiceUrl")
+    pay_line = f"Dá pra pagar por aqui: {invoice}" if invoice else "Me responde aqui que eu te mando o link pra pagar."
+
+    if event == "trial.expiring":
+        subscribe = shop.get("subscribeUrl") or lead.subscribe_url
+        return (
+            f"Opa! O teste grátis da {name} acaba {_when(shop.get('trialEndsAt'))}.\n"
+            f"Pra página continuar no ar, é só assinar por aqui: {subscribe}\n"
+            "Se preferir, me fala o plano que eu te ajudo por aqui mesmo."
+        )
+    if event == "trial.expired":
+        return (
+            f"O teste grátis da {name} terminou e a página saiu do ar, mas ficou tudo guardado "
+            "(clientes, serviços e horários).\n"
+            "Quer continuar? Me responde aqui que eu gero a cobrança e ela volta ao ar assim que o pagamento cair."
+        )
+    if event == "subscription.invoice_created":
+        return (
+            f"Sua assinatura do Gerente Barber tá pronta! {pay_line}\n"
+            "Assim que o pagamento cair, o plano ativa na hora."
+        )
+    if event == "subscription.activated":
+        return f"Pagamento confirmado! O plano da {name} tá ativo. Bom trabalho aí! ✂️"
+    if event == "subscription.past_due":
+        return (
+            f"A mensalidade do Gerente Barber da {name} venceu. {pay_line}\n"
+            f"Se não cair até {_when(shop.get('suspendsAt'))}, a página sai do ar (nada é apagado)."
+        )
+    if event == "subscription.suspended":
+        return (
+            f"A página da {name} saiu do ar por falta de pagamento. "
+            + (f"Assim que a fatura for paga ela volta sozinha: {invoice}" if invoice else "Me responde aqui que eu te ajudo a regularizar.")
+        )
+    if event == "subscription.reactivated":
+        return f"Pagamento recebido, valeu! A {name} tá em dia e no ar."
+    return None
+
+
+def apply_event(lead: BarbershopLead, event: str, shop: dict) -> EventOutcome:
+    """Atualiza o lead conforme o aviso e devolve a mensagem para o dono (se houver)."""
+    trial_status = EVENT_TO_TRIAL_STATUS.get(event)
+    if trial_status is None and event not in BILLING_EVENTS:
+        return EventOutcome(known=False)
+
+    _sync_shop(lead, shop)
+    if trial_status is not None:
+        lead.trial_status = trial_status
+        lead.langgraph_node = f"5.TrialActivator:{trial_status.value.title()}"
+    else:
+        lead.langgraph_node = f"5.Billing:{event.split('.', 1)[1].title().replace('_', '')}"
     if trial_status == TrialStatus.CONVERTED:
         lead.status = LeadStatus.CONVERTED
-    return True
+    if event in EVENTS_THAT_RESOLVE_BILLING_HELP:
+        lead.needs_billing_help = False
+    return EventOutcome(known=True, message=build_notice(event, lead, shop))

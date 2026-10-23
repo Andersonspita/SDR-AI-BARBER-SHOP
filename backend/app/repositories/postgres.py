@@ -22,7 +22,8 @@ _LEAD_COLUMNS = (
     "id, shop_name, slug, owner_name, phone, instagram_handle, bio_url, competitor_name, "
     "estimated_barbers, current_system, priority, status, city, state, neighborhood, "
     "langgraph_node, last_objection_type, source, cadence_step, next_touch_at, "
-    "email, trial_shop_id, trial_status, trial_ends_at, created_at"
+    "email, trial_shop_id, trial_status, trial_ends_at, subscription_status, plan_code, "
+    "invoice_url, subscribe_url, suspends_at, needs_billing_help, created_at"
 )
 _LEAD_SELECT = f"SELECT {_LEAD_COLUMNS} FROM barbershop_leads"
 _DIGITS_SQL = "regexp_replace(phone, '\\D', '', 'g')"
@@ -71,6 +72,12 @@ def _row_to_lead(row: asyncpg.Record) -> BarbershopLead:
         trial_shop_id=row["trial_shop_id"],
         trial_status=row["trial_status"],
         trial_ends_at=row["trial_ends_at"].isoformat() if row["trial_ends_at"] else None,
+        subscription_status=row["subscription_status"],
+        plan_code=row["plan_code"],
+        invoice_url=row["invoice_url"],
+        subscribe_url=row["subscribe_url"],
+        suspends_at=row["suspends_at"].isoformat() if row["suspends_at"] else None,
+        needs_billing_help=bool(row["needs_billing_help"]),
         created_at=row["created_at"].isoformat(),
     )
 
@@ -139,7 +146,7 @@ class PostgresRepository:
         row = await self._pool.fetchrow(
             f"""
             INSERT INTO barbershop_leads ({_LEAD_COLUMNS})
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29, $30, $31)
             ON CONFLICT (phone) DO NOTHING
             RETURNING {_LEAD_COLUMNS}
             """,
@@ -149,6 +156,8 @@ class PostgresRepository:
             lead.langgraph_node, lead.last_objection_type, lead.source.value, lead.cadence_step,
             _parse_ts(lead.next_touch_at), lead.email, lead.trial_shop_id,
             lead.trial_status.value if lead.trial_status else None, _parse_ts(lead.trial_ends_at),
+            lead.subscription_status, lead.plan_code, lead.invoice_url, lead.subscribe_url,
+            _parse_ts(lead.suspends_at), lead.needs_billing_help,
             datetime.fromisoformat(lead.created_at),
         )
         if row is None:
@@ -163,6 +172,8 @@ class PostgresRepository:
                 estimated_barbers = $7, current_system = $8, priority = $9, status = $10, neighborhood = $11,
                 langgraph_node = $12, last_objection_type = $13, cadence_step = $14, next_touch_at = $15,
                 email = $16, trial_shop_id = $17, trial_status = $18, trial_ends_at = $19, slug = $20,
+                subscription_status = $21, plan_code = $22, invoice_url = $23, subscribe_url = $24,
+                suspends_at = $25, needs_billing_help = $26,
                 updated_at = NOW()
             WHERE id = $1
             """,
@@ -171,6 +182,8 @@ class PostgresRepository:
             lead.neighborhood, lead.langgraph_node, lead.last_objection_type, lead.cadence_step,
             _parse_ts(lead.next_touch_at), lead.email, lead.trial_shop_id,
             lead.trial_status.value if lead.trial_status else None, _parse_ts(lead.trial_ends_at), lead.slug,
+            lead.subscription_status, lead.plan_code, lead.invoice_url, lead.subscribe_url,
+            _parse_ts(lead.suspends_at), lead.needs_billing_help,
         )
 
     async def get_lead(self, lead_id: str) -> Optional[BarbershopLead]:
@@ -232,7 +245,7 @@ class PostgresRepository:
         if not _is_uuid(lead_id):
             return []
         rows = await self._pool.fetch(
-            "SELECT * FROM interactions WHERE lead_id = $1 ORDER BY sent_at, id", lead_id
+            "SELECT * FROM interactions WHERE lead_id = $1 ORDER BY sent_at, seq", lead_id
         )
         return [_row_to_interaction(row) for row in rows]
 
@@ -257,6 +270,13 @@ class PostgresRepository:
             key,
             value,
         )
+
+    async def mark_event_processed(self, event_id: str) -> bool:
+        inserted = await self._pool.fetchval(
+            "INSERT INTO processed_webhook_events (id) VALUES ($1) ON CONFLICT (id) DO NOTHING RETURNING id",
+            event_id,
+        )
+        return inserted is not None
 
     async def try_acquire_worker_lock(self) -> bool:
         """Advisory lock de sessão: fica com quem pegou até a conexão fechar (ou o processo morrer)."""

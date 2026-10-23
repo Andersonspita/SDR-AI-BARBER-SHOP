@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import type { Lead } from "../types";
 import { TRIAL_STATUS_LABELS, canActivateTrial } from "../presentation";
+import { SubscriptionSummary } from "./SubscriptionSummary";
 
 interface TrialPanelProps {
   lead: Lead;
@@ -44,9 +45,12 @@ export function TrialPanel({ lead, isIntegrationEnabled, isActivating, onActivat
             <span className="tone-muted"> · até {dateFormatter.format(new Date(lead.trial_ends_at))}</span>
           )}
         </p>
-        <p className="tone-muted" style={{ fontSize: 12 }}>
-          Login do dono: <strong>{lead.email}</strong>
-        </p>
+        {lead.email && (
+          <p className="tone-muted" style={{ fontSize: 12 }}>
+            Login do dono: <strong>{lead.email}</strong>
+          </p>
+        )}
+        <SubscriptionSummary lead={lead} />
       </div>
     );
   }

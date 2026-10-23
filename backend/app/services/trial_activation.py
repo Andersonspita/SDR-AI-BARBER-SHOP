@@ -58,6 +58,8 @@ async def activate_trial(lead: BarbershopLead) -> ProvisionedTrial:
     lead.trial_ends_at = _iso(trial.trial_ends_at)
     if lead.trial_status is None:
         lead.trial_status = TrialStatus.PROVISIONED
+    lead.subscription_status = lead.subscription_status or "TRIAL"
+    lead.subscribe_url = f"{lead.preview_url}/dashboard/assinatura"
     lead.status = LeadStatus.TRIAL_STARTED
     lead.langgraph_node = "5.TrialActivator:Provisioned"
     logger.info("Teste grátis liberado para %s em %s", lead.shop_name, trial.url)

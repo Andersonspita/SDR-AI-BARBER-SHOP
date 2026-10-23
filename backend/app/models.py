@@ -126,6 +126,14 @@ class BarbershopLead:
     trial_shop_id: Optional[str] = None  # id da barbearia criada no barber-shop
     trial_status: Optional[TrialStatus] = None
     trial_ends_at: Optional[str] = None
+    # Assinatura no barber-shop (espelho do que chega pelos webhooks de lá)
+    subscription_status: Optional[str] = None  # TRIAL | ACTIVE | PAST_DUE | SUSPENDED | EXPIRED
+    plan_code: Optional[str] = None  # SOLO | SQUAD | PRO | EMPIRE
+    invoice_url: Optional[str] = None  # fatura em aberto no Asaas
+    subscribe_url: Optional[str] = None  # tela de assinatura do painel do dono
+    suspends_at: Optional[str] = None  # quando sai do ar se não pagar
+    # O dono pediu para pagar e não há fatura: alguém precisa gerar a cobrança na plataforma.
+    needs_billing_help: bool = False
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     def __post_init__(self):

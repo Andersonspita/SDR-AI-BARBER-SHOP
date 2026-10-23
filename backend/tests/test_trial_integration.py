@@ -3,6 +3,7 @@ import asyncio
 import json
 import os
 import time
+import uuid
 import unittest
 from dataclasses import dataclass, field
 from typing import List
@@ -230,7 +231,7 @@ class TestManualActivation(TrialApiCase):
 class TestBarbershopWebhook(TrialApiCase):
     def _post(self, event: str, *, secret: str = BARBERSHOP_SECRET, timestamp: int | None = None, lead_id=None):
         body = json.dumps({
-            "id": "evt-1",
+            "id": f"evt-{uuid.uuid4()}",  # o barber-shop gera um id por aviso
             "event": event,
             "occurredAt": "2026-10-22T13:00:00.000Z",
             "shop": {"id": "shop-123", "slug": "barbearia-sao-jose-cia-2", "externalLeadId": lead_id or self.lead.id,

@@ -1,7 +1,7 @@
 from __future__ import annotations
 import re
 from typing import Callable, Dict, List, Optional, TypedDict
-from backend.app.models import BarbershopLead, LeadStatus
+from backend.app.models import BarbershopLead, LeadStatus, TrialStatus
 from backend.app.agents.objection_rag import (
     build_objection_response,
     detect_objections,
@@ -148,6 +148,56 @@ def _trial_activator_node(state: GraphState) -> GraphState:
     return state
 
 
+# Situações em que o dono precisa pagar para a barbearia ficar (ou voltar) no ar.
+OWES_PAYMENT = ("EXPIRED", "PAST_DUE", "SUSPENDED")
+
+
+def _customer_node(state: GraphState) -> GraphState:
+    """
+    Quem já tem barbearia no barber-shop é cliente, não lead: a resposta depende da assinatura.
+    Deve pagar -> manda a fatura (ou pede para alguém gerar a cobrança); em teste -> link para
+    assinar; plano em dia -> atendimento.
+    """
+    lead = state["lead"]
+    status = lead.subscription_status
+    if status in OWES_PAYMENT:
+        if lead.invoice_url:
+            state["langgraph_node"] = "5.Billing:InvoiceSent"
+            state["reply"] = (
+                f"Aqui o link pra pagar: {lead.invoice_url}\n"
+                f"Assim que o pagamento cair, a {lead.shop_name} fica em dia na hora."
+            )
+        else:
+            # Sem fatura: a cobrança é gerada na plataforma (precisa do CPF/CNPJ); o painel sinaliza.
+            lead.needs_billing_help = True
+            state["langgraph_node"] = "5.Billing:NeedsCharge"
+            state["reply"] = (
+                f"Show! Vou gerar a cobrança da {lead.shop_name} e te mando o link aqui em instantes. "
+                "Se for no CNPJ da barbearia, já me passa o número."
+            )
+    elif (
+        status in (None, "TRIAL")
+        and state["intent"] == "INTERESTED"
+        and lead.subscribe_url
+        # Antes do 1º acesso, "quero" é pedir o acesso de novo, não assinar.
+        and lead.trial_status in (TrialStatus.ACTIVATED, TrialStatus.EXPIRING)
+    ):
+        state["langgraph_node"] = "5.Billing:SubscribeLink"
+        state["reply"] = (
+            f"Pra assinar é rapidinho: {lead.subscribe_url}\n"
+            "Escolhe o plano e paga por Pix, boleto ou cartão. Se travar em algo, me chama aqui."
+        )
+    elif status in (None, "TRIAL") and state["intent"] == "INTERESTED":
+        return _trial_activator_node(state)
+    else:
+        state["langgraph_node"] = "5.Billing:Support"
+        state["reply"] = (
+            f"Fechou! Qualquer dúvida sobre a página da {lead.shop_name} ({lead.preview_url}), "
+            "é só me chamar aqui."
+        )
+    return state
+
+
 def _neutral_node(state: GraphState) -> GraphState:
     lead = state["lead"]
     state["langgraph_node"] = "4.Router:Neutral"
@@ -191,7 +241,10 @@ def classify_and_run_graph(
         state["langgraph_node"] = "4.Router:DoNotContact"
     else:
         state = _router_node(state)
-        state = INTENT_EDGES[state["intent"]](state)
+        if lead.trial_shop_id and state["intent"] in ("INTERESTED", "NEUTRAL"):
+            state = _customer_node(state)
+        else:
+            state = INTENT_EDGES[state["intent"]](state)
 
     lead.langgraph_node = state["langgraph_node"]
     return {

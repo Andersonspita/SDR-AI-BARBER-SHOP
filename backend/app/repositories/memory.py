@@ -14,6 +14,7 @@ class InMemoryRepository:
         self.leads: Dict[str, BarbershopLead] = {}
         self.interactions: List[Interaction] = []
         self.settings: Dict[str, str] = {}
+        self.processed_events: Set[str] = set()
 
     async def upsert_lead(self, lead: BarbershopLead) -> BarbershopLead:
         for existing in self.leads.values():
@@ -76,6 +77,12 @@ class InMemoryRepository:
 
     async def set_setting(self, key: str, value: str) -> None:
         self.settings[key] = value
+
+    async def mark_event_processed(self, event_id: str) -> bool:
+        if event_id in self.processed_events:
+            return False
+        self.processed_events.add(event_id)
+        return True
 
     async def try_acquire_worker_lock(self) -> bool:
         # Memória só existe dentro de um processo: não há outra réplica para disputar.

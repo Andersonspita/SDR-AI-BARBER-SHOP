@@ -70,7 +70,7 @@ Cabeçalhos:
 - `X-Gerente-Barber-Timestamp`: segundos Unix
 - `X-Gerente-Barber-Signature`: `sha256=` seguido de `hex(HMAC_SHA256(segredo, "{timestamp}.{corpo bruto}"))`
 
-O SDR recusa assinaturas inválidas e avisos com mais de 5 minutos (proteção contra reenvio).
+O SDR recusa assinaturas inválidas e avisos com mais de 5 minutos (proteção contra reenvio). Cada `id` é registrado: um aviso reenviado responde `duplicate` e não repete a mensagem ao dono.
 
 ```json
 {
@@ -83,19 +83,36 @@ O SDR recusa assinaturas inválidas e avisos com mais de 5 minutos (proteção c
     "externalLeadId": "id do lead",
     "subscriptionStatus": "TRIAL",
     "plan": "SQUAD",
-    "trialEndsAt": "2026-10-29T13:00:00.000Z"
+    "trialEndsAt": "2026-10-29T13:00:00.000Z",
+    "name": "Barbearia São José & Cia",
+    "url": "https://barber-shop.horizonaj.com.br/barbearia-sao-jose-cia-2",
+    "subscribeUrl": "https://barber-shop.horizonaj.com.br/barbearia-sao-jose-cia-2/dashboard/assinatura",
+    "invoiceUrl": "https://www.asaas.com/i/... (ou null)",
+    "suspendsAt": "2026-10-28T15:00:00.000Z (ou null)"
   }
 }
 ```
 
-| Evento | Quando | Efeito no SDR |
-|---|---|---|
-| `trial.activated` | O dono definiu a senha ou fez o primeiro login | `trial_status = ACTIVATED` |
-| `trial.expiring` | Faltam 48h (o dono também é avisado no WhatsApp) | `trial_status = EXPIRING` |
-| `trial.expired` | O teste venceu: barbearia `EXPIRED` e fora do ar, sem apagar dados | `trial_status = EXPIRED` |
-| `subscription.activated` | Alguém clicou em **Ativar plano** em `/plataforma` | `trial_status = CONVERTED` e lead `CONVERTED` |
+| Evento | Quando | Efeito no SDR | Mensagem ao dono (pela conversa do SDR) |
+|---|---|---|---|
+| `trial.activated` | O dono definiu a senha ou fez o primeiro login | `trial_status = ACTIVATED` | — |
+| `trial.expiring` | Faltam 48h | `trial_status = EXPIRING` | Data do fim + link para assinar (`subscribeUrl`) |
+| `trial.expired` | O teste venceu: barbearia `EXPIRED` e fora do ar, sem apagar dados | `trial_status = EXPIRED` | "Terminou, ficou tudo guardado; responda que eu gero a cobrança" |
+| `subscription.invoice_created` | A plataforma gerou a cobrança (**Gerar cobrança**) | fatura salva no lead | Link da fatura |
+| `subscription.activated` | 1º pagamento confirmado (ou **Ativar sem cobrança**) | `trial_status = CONVERTED` e lead `CONVERTED` | "Pagamento confirmado" |
+| `subscription.past_due` | Mensalidade vencida | `subscription_status = PAST_DUE` | Link da fatura + quando sai do ar (`suspendsAt`) |
+| `subscription.suspended` | Passou da tolerância sem pagar | `SUSPENDED` | "Saiu do ar; pague e volta sozinha" + fatura |
+| `subscription.reactivated` | Pagamento atrasado caiu | `ACTIVE` | "Pagamento recebido, em dia" |
 
-Só barbearias que vieram do SDR (com `externalLeadId`) geram avisos.
+Só barbearias que vieram do SDR (com `externalLeadId`) geram avisos. **Para essas, o barber-shop não manda os próprios avisos pelo WhatsApp da plataforma**: o SDR manda na conversa que já tem com o dono, e a resposta dele cai no grafo do SDR. Leads descadastrados (`DO_NOT_CONTACT`) têm a situação atualizada, mas não recebem mensagem.
+
+### Respostas do dono que já é cliente
+
+Para quem já tem barbearia (`trial_shop_id`), interesse ou resposta neutra não recebe mais o discurso de venda:
+
+- **Deve pagar** (teste vencido, mensalidade vencida, suspensa): com fatura em aberto, o SDR manda o link. Sem fatura, responde "vou gerar a cobrança" e marca `needs_billing_help`. O painel mostra o alerta **Gerar cobrança em /plataforma** (precisa do CPF/CNPJ); quando a cobrança é gerada, o link chega na conversa sozinho (`subscription.invoice_created`) e o alerta some.
+- **Em teste, já usando o painel:** link para assinar (`subscribeUrl`).
+- **Em dia:** atendimento ("qualquer dúvida, me chama").
 
 ## Fluxo na conversa
 
