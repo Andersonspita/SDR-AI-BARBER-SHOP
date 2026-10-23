@@ -43,3 +43,17 @@ services:
   evolution-api:
     # Painel da Evolution (QR code) só por túnel SSH: ssh -L 8090:127.0.0.1:8090 root@VPS
     ports: !override ["127.0.0.1:${EVOLUTION_PORT:-8090}:8080"]
+    environment:
+      # Pelo nome do container, que é único: na rede compartilhada abaixo o nome "backend" também
+      # é o backend do Gerente Barber.
+      WEBHOOK_GLOBAL_URL: http://sdr_ai_backend:8000/webhook/whatsapp?token=${WEBHOOK_SECRET:-troque-este-segredo-do-webhook}
+    networks:
+      - default
+      - whatsapp-compartilhado
+
+networks:
+  # Só a Evolution e o backend do Gerente Barber (que manda confirmações e lembretes pelo número de
+  # agendamentos). Rede própria em vez de juntar as duas: os dois projetos têm serviços chamados
+  # backend e redis, e numa rede única esses nomes ficariam ambíguos.
+  whatsapp-compartilhado:
+    name: gerente-barber-whatsapp
