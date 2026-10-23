@@ -15,9 +15,10 @@ import os
 import time
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Tuple
 from backend.app.models import BarbershopLead, LeadStatus, TrialStatus
 from backend.app.store import BRT
+from backend.app.services.onboarding import welcome_messages
 
 
 MAX_CLOCK_SKEW_SEC = 300
@@ -71,8 +72,8 @@ def signature_problem(
 @dataclass(frozen=True)
 class EventOutcome:
     known: bool
-    # Mensagem para o dono na conversa do SDR (None = evento sem aviso, ex.: dono entrou no painel)
-    message: Optional[str] = None
+    # Mensagens para o dono na conversa do SDR, na ordem de envio (vazio = evento sem aviso).
+    messages: Tuple[str, ...] = ()
 
 
 def _parse_iso(value: Optional[str]) -> Optional[datetime]:
@@ -171,4 +172,9 @@ def apply_event(lead: BarbershopLead, event: str, shop: dict) -> EventOutcome:
         lead.status = LeadStatus.CONVERTED
     if event in EVENTS_THAT_RESOLVE_BILLING_HELP:
         lead.needs_billing_help = False
-    return EventOutcome(known=True, message=build_notice(event, lead, shop))
+    if event == "trial.activated":
+        # Primeiro acesso ao painel: passo a passo, manual e como divulgar o link.
+        name = shop.get("name") or lead.shop_name
+        return EventOutcome(known=True, messages=tuple(welcome_messages(name, shop.get("url") or lead.preview_url)))
+    notice = build_notice(event, lead, shop)
+    return EventOutcome(known=True, messages=(notice,) if notice else ())

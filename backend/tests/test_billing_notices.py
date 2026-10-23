@@ -161,9 +161,29 @@ class TestBillingNotices(NoticeCase):
         self.assertEqual(self.outbound(), [])
         self.assertEqual(self.saved().subscription_status, "PAST_DUE")
 
-    def test_activated_trial_event_sends_nothing(self):
-        result = self.notify("trial.activated")
-        self.assertIsNone(result["delivery"])
+    def test_first_access_sends_steps_manual_how_to_share_and_a_forwardable_message(self):
+        self.notify("trial.activated")
+        steps, share, forward = self.outbound()
+        self.assertIn("Barbearia → Serviços", steps)
+        self.assertIn(SHOP_URL, steps)
+        self.assertIn("/manual-da-barbearia.pdf", steps)
+        self.assertIn("Instagram", share)
+        self.assertIn("WhatsApp Business", share)
+        self.assertIn("Encaminhar", share)
+        # A última é só o texto para os clientes: sem instrução ao dono, pronta para encaminhar.
+        self.assertTrue(forward.startswith("Agora a Barbearia São José & Cia tem agendamento online!"))
+        self.assertIn(SHOP_URL, forward)
+        self.assertNotIn("painel", forward.lower())
+
+    def test_first_access_resent_by_barber_shop_is_not_repeated(self):
+        self.notify("trial.activated", event_id="evt-ativou")
+        self.assertEqual(self.notify("trial.activated", event_id="evt-ativou")["status"], "duplicate")
+        self.assertEqual(len(self.outbound()), 3)
+
+    def test_first_access_of_unsubscribed_owner_sends_nothing(self):
+        self.lead.status = LeadStatus.DO_NOT_CONTACT
+        _run(store.save_lead(self.lead))
+        self.assertIsNone(self.notify("trial.activated")["delivery"])
         self.assertEqual(self.outbound(), [])
 
 

@@ -1,4 +1,5 @@
 from __future__ import annotations
+import asyncio
 import json
 import logging
 import os
@@ -32,6 +33,8 @@ from backend.app.services.trial_activation import (
 
 
 logging.basicConfig(level=os.getenv("LOG_LEVEL", "INFO"))
+# Intervalo entre mensagens seguidas para o mesmo dono (ex.: boas-vindas), para chegarem em ordem.
+MESSAGE_SEQUENCE_GAP_SEC = 2.0
 log_redaction.install()
 logger = logging.getLogger(__name__)
 
@@ -231,13 +234,17 @@ async def barbershop_webhook_receiver(request: Request) -> dict:
 
     # O aviso ao dono sai pela conversa do SDR (o barber-shop não manda o dele para leads do SDR).
     delivery = None
-    if outcome.message:
-        if lead.status == LeadStatus.DO_NOT_CONTACT:
-            logger.warning("Aviso %s não enviado: %s pediu para não ser contatado", event, lead.shop_name)
-        else:
-            delivery = await send_to_lead(lead, outcome.message, node=lead.langgraph_node, intent="BILLING_NOTICE")
+    if outcome.messages and lead.status == LeadStatus.DO_NOT_CONTACT:
+        logger.warning("Aviso %s não enviado: %s pediu para não ser contatado", event, lead.shop_name)
+    elif outcome.messages:
+        for index, message in enumerate(outcome.messages):
+            if index:
+                await asyncio.sleep(MESSAGE_SEQUENCE_GAP_SEC if evolution_client.provider != "MOCK" else 0)
+            delivery = await send_to_lead(lead, message, node=lead.langgraph_node, intent="BILLING_NOTICE")
             if not delivery["delivered"]:
+                # Para no primeiro erro: a sequência fora de ordem confunde mais do que ajuda.
                 logger.warning("Aviso %s para %s não saiu: %s", event, lead.shop_name, delivery["error"])
+                break
     return {"status": "processed", "event": event, "delivery": delivery, "lead": lead.to_dict()}
 
 

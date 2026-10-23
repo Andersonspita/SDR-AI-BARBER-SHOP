@@ -297,3 +297,15 @@ class TestStartupGuard(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestTrialMessage(unittest.TestCase):
+    def test_first_message_gives_the_link_to_share_and_the_password_link(self):
+        from backend.app.services.onboarding import trial_message
+
+        text = trial_message("Barbearia X", "https://bs.test/barbearia-x", "https://bs.test/x/login/recuperar?token=t", "d@x.com", 7)
+        self.assertIn("https://bs.test/barbearia-x", text)
+        self.assertIn("seus clientes vão usar", text)
+        self.assertIn("token=t", text)
+        self.assertIn("7 dias grátis", text)
+        self.assertIn("te mando o passo a passo e o manual", text)

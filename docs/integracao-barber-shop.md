@@ -95,7 +95,7 @@ O SDR recusa assinaturas inválidas e avisos com mais de 5 minutos (proteção c
 
 | Evento | Quando | Efeito no SDR | Mensagem ao dono (pela conversa do SDR) |
 |---|---|---|---|
-| `trial.activated` | O dono definiu a senha ou fez o primeiro login | `trial_status = ACTIVATED` | — |
+| `trial.activated` | O dono definiu a senha ou fez o primeiro login | `trial_status = ACTIVATED` | Três mensagens: primeiros passos + manual em PDF (`BARBERSHOP_MANUAL_URL`, padrão `SAAS_BASE_URL/manual-da-barbearia.pdf`); como pôr o link no Instagram, WhatsApp Business e Google; e o texto pronto para o dono encaminhar aos clientes |
 | `trial.expiring` | Faltam 48h para o fim do teste | `trial_status = EXPIRING` | Dia do fim + como pagar a 1ª mensalidade (`invoiceUrl` ou `subscribeUrl`) |
 | `subscription.invoice_created` | Fatura gerada (sozinha, dias antes do vencimento, ou pelo operador) | fatura salva no lead | Link de pagamento do Asaas, ou a tela de Assinatura do painel |
 | `trial.expired` | A 1ª fatura (que vence no fim do teste) ficou em aberto | `trial_status = EXPIRED`, `subscription_status = PAST_DUE` | "Terminou e a 1ª mensalidade venceu" + como pagar + quando o agendamento pausa (`suspendsAt`) |

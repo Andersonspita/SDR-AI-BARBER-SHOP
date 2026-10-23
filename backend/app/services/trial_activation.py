@@ -6,6 +6,7 @@ from typing import Optional
 from backend.app.models import BarbershopLead, LeadStatus, SAAS_BASE_URL, TrialStatus
 from backend.app.services import barbershop_platform as platform_module
 from backend.app.services.barbershop_platform import ProvisionedTrial, ProvisioningError
+from backend.app.services.onboarding import trial_message
 
 
 logger = logging.getLogger(__name__)
@@ -29,16 +30,8 @@ def trial_block_reason(lead: BarbershopLead) -> Optional[str]:
 
 
 def build_trial_message(lead: BarbershopLead, trial: ProvisionedTrial) -> str:
-    days = platform_module.barbershop_platform.trial_days
-    if trial.setup_url:
-        return (
-            f"Prontinho! A página da {lead.shop_name} já tá no ar: {trial.url}\n"
-            f"Crie sua senha por este link (vale por 72h): {trial.setup_url}\n"
-            f"São {days} dias grátis, já com Corte, Barba e Combo cadastrados pra você ajustar."
-        )
-    return (
-        f"Sua página da {lead.shop_name} tá no ar: {trial.url}\n"
-        f"É só entrar com o e-mail {lead.email}. Se esqueceu a senha, use o \"esqueci minha senha\" na tela de login."
+    return trial_message(
+        lead.shop_name, trial.url, trial.setup_url, lead.email, platform_module.barbershop_platform.trial_days
     )
 
 
