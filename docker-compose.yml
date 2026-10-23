@@ -51,7 +51,19 @@ services:
       CACHE_LOCAL_ENABLED: "false"
       WEBHOOK_GLOBAL_ENABLED: "true"
       WEBHOOK_GLOBAL_URL: http://backend:8000/webhook/whatsapp?token=${WEBHOOK_SECRET:-troque-este-segredo-do-webhook}
+      # Sem isso a Evolution acrescenta "/messages-upsert" ao fim da URL, que cai dentro do ?token= e o
+      # webhook passa a ser recusado (401). Só as mensagens recebidas interessam ao SDR.
+      WEBHOOK_GLOBAL_WEBHOOK_BY_EVENTS: "false"
       WEBHOOK_EVENTS_MESSAGES_UPSERT: "true"
+      WEBHOOK_EVENTS_QRCODE_UPDATED: "false"
+      WEBHOOK_EVENTS_CONNECTION_UPDATE: "false"
+      WEBHOOK_EVENTS_MESSAGES_UPDATE: "false"
+      WEBHOOK_EVENTS_SEND_MESSAGE: "false"
+      WEBHOOK_EVENTS_CONTACTS_UPSERT: "false"
+      WEBHOOK_EVENTS_CONTACTS_UPDATE: "false"
+      WEBHOOK_EVENTS_CHATS_UPSERT: "false"
+      WEBHOOK_EVENTS_CHATS_UPDATE: "false"
+      WEBHOOK_EVENTS_PRESENCE_UPDATE: "false"
     depends_on:
       postgres:
         condition: service_healthy
