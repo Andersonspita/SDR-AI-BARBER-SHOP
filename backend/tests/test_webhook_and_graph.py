@@ -163,6 +163,19 @@ class TestApi(unittest.TestCase):
         body = self.client.post("/webhook/whatsapp", json=payload, headers=WEBHOOK_HEADERS).json()
         self.assertEqual(body["status"], "ignored")
 
+    def test_webhook_lid_address_uses_the_alternate_phone(self):
+        def evolution(key: dict) -> dict:
+            payload = {"event": "messages.upsert", "data": {"key": {"fromMe": False, **key}, "message": {"conversation": "tenho interesse"}}}
+            return self.client.post("/webhook/whatsapp", json=payload, headers=WEBHOOK_HEADERS).json()
+
+        # Endereçamento novo do WhatsApp: o número vem à parte.
+        body = evolution({"remoteJid": "182736455463728@lid", "remoteJidAlt": "5577999123456@s.whatsapp.net"})
+        self.assertEqual(body["intent"], "INTERESTED")
+        # Sem o número, o id do @lid nunca é tratado como telefone.
+        self.assertEqual(evolution({"remoteJid": "182736455463728@lid"})["status"], "ignored")
+        # Mensagem de grupo não é conversa com o lead, mesmo vinda do número dele.
+        self.assertEqual(evolution({"remoteJid": "120363000000000000@g.us", "participant": "5577999123456@s.whatsapp.net"})["status"], "ignored")
+
     def test_webhook_unknown_phone_is_ignored(self):
         body = self._webhook("oi", phone="5511900000000").json()
         self.assertEqual(body["status"], "ignored")

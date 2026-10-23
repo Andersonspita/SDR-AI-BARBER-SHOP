@@ -114,11 +114,26 @@ def _extract_inbound(payload: Dict[str, Any]) -> Tuple[Optional[str], Optional[s
     data = payload.get("data")
     if isinstance(data, dict):
         key = data.get("key") or {}
-        phone = (key.get("remoteJid") or "").split("@")[0]
         message = data.get("message") or {}
         text = message.get("conversation") or (message.get("extendedTextMessage") or {}).get("text")
-        return phone or None, text, bool(key.get("fromMe"))
+        return _sender_phone(key, data), text, bool(key.get("fromMe"))
     return payload.get("phone"), payload.get("message"), False
+
+
+def _sender_phone(key: Dict[str, Any], data: Dict[str, Any]) -> Optional[str]:
+    """
+    Número de quem mandou a mensagem. Grupos e status não são conversa com o lead. Contatos com
+    endereçamento novo do WhatsApp chegam como `<id>@lid`, sem o número: aí ele vem em
+    `remoteJidAlt`/`senderPn` (o id do @lid não é telefone e não pode casar com lead nenhum).
+    """
+    remote = key.get("remoteJid") or ""
+    if remote.endswith("@g.us") or remote.startswith("status@"):
+        return None
+    candidates = [remote, key.get("remoteJidAlt"), key.get("senderPn"), data.get("senderPn")]
+    for jid in candidates:
+        if jid and "@lid" not in jid:
+            return jid.split("@")[0] or None
+    return None
 
 
 async def handle_inbound(phone: str, text: str) -> dict:
