@@ -24,6 +24,11 @@ UNSUBSCRIBE_PATTERNS = [
         r"\bnao me (mande|mandem|chame|perturbe)",
         r"\bbloquear\b",
         r"\bstop\b",
+        # Respostas à saída oferecida na D0 ("se não fizer sentido, me avisa que eu não mando mais").
+        r"\bnao (mande|mandem|envie|enviem|manda) mais\b",
+        r"\bnao faz sentido\b",
+        r"\bsem interesse\b",
+        r"\bpode parar\b",
     )
 ]
 
@@ -40,7 +45,9 @@ INTEREST_PATTERNS = [
         r"\bcomo funciona\b",
         r"\bquanto (custa|e|fica)\b",
         r"\btestar\b",
-        r"^\s*(sim|claro|vamos)\b",
+        # Respostas curtas à pergunta de sim ou não da D0 ("posso deixar uma página…?").
+        r"^\s*(sim|claro|vamos|pode|beleza|blz|fechou|fechado|show|demorou|aceito|com certeza)\b",
+        r"(?<!nao )\bpode (sim|deixar|ser|fazer|liberar|criar)\b",
     )
 ]
 

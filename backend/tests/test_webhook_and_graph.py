@@ -206,3 +206,19 @@ class TestApi(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestReplyToTheColdMessage(unittest.TestCase):
+    """A D0 fecha com uma pergunta de sim ou não e uma saída; as respostas curtas têm de ser entendidas."""
+
+    def test_short_yes_answers_are_interest(self):
+        for text in ("pode sim", "Pode", "opa, pode deixar", "beleza, pode ser", "Show", "fechou"):
+            self.assertEqual(classify_intent(text), "INTERESTED", text)
+
+    def test_taking_the_offered_way_out_unsubscribes(self):
+        for text in ("não faz sentido", "não mande mais", "pode parar", "sem interesse, obrigado"):
+            self.assertEqual(classify_intent(text), "UNSUBSCRIBE", text)
+
+    def test_not_now_is_not_a_yes(self):
+        for text in ("não pode ser agora", "agora não"):
+            self.assertEqual(classify_intent(text), "NEUTRAL", text)
