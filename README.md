@@ -113,7 +113,7 @@ O `NEXT_PUBLIC_API_URL` é embutido no build do painel: se mudar, rode o build d
 - **Painel e `/api/*`:** exigem sessão. `POST /api/auth/login` grava o cookie `sdr_session` (httpOnly, SameSite=Lax) e também devolve o token para scripts (`Authorization: Bearer <token>`). Cinco senhas erradas em 5 min bloqueiam o IP temporariamente.
 - **Webhook:** `POST /webhook/whatsapp` só aceita o `WEBHOOK_SECRET` no header `X-Webhook-Token` ou em `?token=`. O compose já configura a Evolution com o token na URL.
 - **Fail fast:** com `WHATSAPP_PROVIDER` real, a API não sobe se a senha, os segredos ou o `COOKIE_SECURE` estiverem fracos (veja os comentários do `.env.example`). Em `MOCK`, isso aparece só como aviso no log.
-- **Leads fictícios:** sem `GOOGLE_MAPS_API_KEY`, os leads saem com `source=SYNTHETIC`. Com WhatsApp real, qualquer envio para eles é bloqueado (D0 responde `409`, o worker tira o lead da régua e o simulador do painel fica desligado). Leads antigos do banco foram migrados como fictícios.
+- **Leads fictícios:** sem `GOOGLE_MAPS_API_KEY` nem `APIFY_TOKEN`, a busca gera leads com `source=SYNTHETIC`. Com WhatsApp real, qualquer envio para eles é bloqueado (D0 responde `409`, o worker tira o lead da régua e o simulador do painel fica desligado). Leads antigos do banco foram migrados como fictícios.
 
 ## Teste grátis no barber-shop
 
@@ -179,7 +179,9 @@ Veja `.env.example` (API) e `frontend/.env.example` (painel). Principais:
 - `DATABASE_CONNECT_ATTEMPTS`: tentativas de conexão na subida, com 2 s entre elas.
 - `ADMIN_EMAIL`, `ADMIN_PASSWORD`, `JWT_SECRET`, `SESSION_TTL_HOURS`, `COOKIE_SECURE`: acesso ao painel.
 - `WEBHOOK_SECRET`: segredo do webhook da Evolution.
-- `GOOGLE_MAPS_API_KEY`: busca real de barbearias (Places API New). Sem ela, os leads são fictícios.
+- `GOOGLE_MAPS_API_KEY`: busca real de barbearias (Places API New).
+- `APIFY_TOKEN`, `APIFY_MAX_PLACES`: busca real pelo Google Maps via Apify, usada quando não há chave do Google. A busca leva de 1 a 3 minutos e roda em segundo plano (`POST /api/leads/scrape` devolve `status: running` e um `run_id`; `GET /api/leads/scrape/{run_id}` informa o andamento e salva ao terminar). Sem nenhuma das duas, os leads são fictícios.
+- **Planilha:** `POST /api/leads/import` (botão *Importar planilha* no painel) aceita CSV com `;` ou `,`; obrigatórios `nome` e `telefone`, opcionais `cidade`, `uf`, `bairro`, `instagram`, `site`, `dono`, `profissionais`. O modelo sai em `GET /api/leads/import/template`.
 - `BARBERSHOP_API_URL`, `BARBERSHOP_PROVISIONING_KEY`, `BARBERSHOP_WEBHOOK_SECRET`, `TRIAL_DAYS`, `BARBERSHOP_ALLOW_SYNTHETIC_TRIALS`: integração do teste grátis. `SAAS_BASE_URL` precisa ser igual ao `APP_URL` do barber-shop.
 - `CADENCE_WORKER_ENABLED`, `CADENCE_SEND_HOURS`, `CADENCE_SEND_WEEKDAYS`, `CADENCE_POLL_INTERVAL_SEC`, `ANTIBAN_MIN_DELAY_SEC`, `ANTIBAN_MAX_DELAY_SEC`: worker da cadência.
 

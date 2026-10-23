@@ -223,3 +223,18 @@ code { font-family: var(--font-mono), monospace; }
   .gb-header-inner { height: auto; padding-top: 10px; padding-bottom: 10px; flex-wrap: wrap; }
   .mini-steps { grid-template-columns: 1fr; }
 }
+
+/* Fonte da busca e importação de planilha */
+.scraper-column { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.scraper-source { font-size: 12px; color: var(--ink-subtle); }
+.link-button { background: none; border: none; padding: 0; color: var(--brand-400); font: inherit; font-weight: 700; cursor: pointer; text-decoration: underline; text-underline-offset: 3px; }
+.link-button:hover { color: var(--brand-300); }
+.import-panel { margin-top: 18px; display: flex; flex-direction: column; gap: 12px; background: var(--surface-1); border: 1px solid var(--line-strong); border-radius: 16px; padding: 18px; }
+.import-panel-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.import-help { font-size: 13px; color: var(--ink-muted); line-height: 1.6; }
+.import-help code { font-size: 12px; background: var(--surface-2); padding: 1px 5px; border-radius: 5px; }
+.import-form { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px; }
+.import-form .field { flex: 1 1 180px; min-width: 0; }
+.import-panel .banner { margin-top: 0; }
+.import-result { font-size: 13px; display: flex; flex-direction: column; gap: 6px; }
+.import-result ul { margin: 0; padding-left: 18px; color: var(--ink-muted); }

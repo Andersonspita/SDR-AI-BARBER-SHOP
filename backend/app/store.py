@@ -61,7 +61,7 @@ def build_metrics(
         "converted_count": sum(1 for l in leads if l.status == LeadStatus.CONVERTED),
         # Clientes que pedem ação: mensalidade vencida/suspensa ou cobrança a gerar
         "billing_attention_count": sum(
-            1 for l in leads if l.needs_billing_help or l.subscription_status in ("PAST_DUE", "SUSPENDED")
+            1 for l in leads if l.needs_billing_help or l.subscription_status in ("PAST_DUE", "BLOCKED", "SUSPENDED")
         ),
         "active_trials_count": sum(
             1 for l in leads if l.trial_status and l.trial_status.value in ("PROVISIONED", "ACTIVATED", "EXPIRING")

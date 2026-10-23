@@ -24,7 +24,7 @@ function platformUrl(previewUrl: string): string | null {
  */
 export function SubscriptionSummary({ lead }: { lead: Lead }) {
   if (!lead.subscription_status && !lead.needs_billing_help) return null;
-  const owes = lead.subscription_status === "PAST_DUE" || lead.subscription_status === "SUSPENDED";
+  const owes = ["PAST_DUE", "BLOCKED", "SUSPENDED"].includes(lead.subscription_status ?? "");
   const platform = platformUrl(lead.preview_url);
 
   return (

@@ -12,7 +12,9 @@ from backend.app.models import Interaction, LeadStatus
 from backend.app.store import store
 from backend.app.auth import AuthSettings, production_auth_problems, require_session, require_webhook_token
 from backend.app.auth import router as auth_router
-from backend.app.agents.scraper import ScraperError, discover_barbershops
+from backend.app.agents.scraper import ScraperError, active_lead_source, discover_barbershops
+from backend.app.agents import apify_maps
+from backend.app.services.lead_import import ImportFormatError, TEMPLATE_CSV, parse_leads_csv
 from backend.app.agents.copywriter import generate_outbound_copy
 from backend.app.agents.graph import ACTION_PROVISION_TRIAL, classify_and_run_graph
 from backend.app.services.evolution import evolution_client
@@ -80,6 +82,12 @@ class ScrapeRequest(BaseModel):
     state: str = Field(min_length=2, max_length=2, description="UF, ex: BA")
     city: str = Field(min_length=2)
     neighborhood: Optional[str] = None
+
+
+class ImportCsvRequest(BaseModel):
+    csv: str = Field(min_length=1, max_length=1_100_000, description="Conteúdo do arquivo CSV")
+    default_state: Optional[str] = Field(default=None, max_length=30, description="UF para linhas sem UF")
+    default_city: Optional[str] = Field(default=None, max_length=80, description="Cidade para linhas sem cidade")
 
 
 class TrialModeRequest(BaseModel):
@@ -224,15 +232,71 @@ async def simulate_inbound(body: SimulatedInbound) -> dict:
     return await handle_inbound(body.phone, body.message)
 
 
+async def _save_found(found: list) -> dict:
+    """Salva sem duplicar por telefone; `new` conta só quem ainda não estava no funil."""
+    saved = []
+    new = 0
+    for lead in found:
+        stored = await store.upsert_lead(lead)
+        new += stored.id == lead.id
+        saved.append(stored.to_dict())
+    return {"status": "done", "count": len(saved), "new": new, "leads": saved}
+
+
 @api.post("/leads/scrape")
 async def scrape_leads(body: ScrapeRequest) -> dict:
-    """Agente 1: descobre barbearias por UF/Cidade e salva (sem duplicar por telefone)."""
+    """
+    Agente 1: descobre barbearias por UF/Cidade e salva (sem duplicar por telefone).
+    Com o Apify a busca leva minutos: devolve `status: running` e o painel acompanha pelo `run_id`.
+    """
     try:
+        if active_lead_source() == "APIFY":
+            run_id = await apify_maps.start_search(body.state, body.city, body.neighborhood)
+            return {"status": "running", "run_id": run_id, "source": "APIFY"}
         found = await discover_barbershops(body.state, body.city, body.neighborhood)
     except ScraperError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
-    saved = [(await store.upsert_lead(lead)).to_dict() for lead in found]
-    return {"count": len(saved), "leads": saved}
+    return await _save_found(found)
+
+
+@api.get("/leads/scrape/{run_id}")
+async def scrape_progress(run_id: str, state: str, city: str, neighborhood: Optional[str] = None) -> dict:
+    """Andamento de uma busca no Apify; quando termina, salva as barbearias encontradas."""
+    if not apify_maps.is_valid_run_id(run_id):
+        raise HTTPException(status_code=400, detail="Id de busca inválido")
+    if not apify_maps.apify_token():
+        raise HTTPException(status_code=409, detail="APIFY_TOKEN não configurado")
+    params = ScrapeRequest(state=state, city=city, neighborhood=neighborhood)
+    try:
+        search = await apify_maps.fetch_search(run_id, params.state, params.city, params.neighborhood)
+    except ScraperError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    if search.status == "running":
+        return {"status": "running", "run_id": run_id}
+    return await _save_found(search.leads)
+
+
+@api.post("/leads/import")
+async def import_leads(body: ImportCsvRequest) -> dict:
+    """Importa barbearias de uma planilha CSV (sem duplicar por telefone)."""
+    try:
+        parsed = parse_leads_csv(body.csv, body.default_state, body.default_city)
+    except ImportFormatError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    result = await _save_found(parsed.leads)
+    return {
+        "imported": result["new"],
+        "already_in_funnel": result["count"] - result["new"],
+        "duplicates_in_file": parsed.duplicates_in_file,
+        "rejected": [{"line": p.line, "reason": p.reason} for p in parsed.problems],
+        "leads": result["leads"],
+    }
+
+
+@api.get("/leads/import/template")
+async def import_template() -> dict:
+    """Modelo de planilha, para o painel oferecer como download."""
+    return {"filename": "modelo-barbearias.csv", "csv": TEMPLATE_CSV}
 
 
 @api.get("/leads")
@@ -320,6 +384,7 @@ async def metrics() -> dict:
         **await store.compute_metrics(),
         "whatsapp_provider": evolution_client.provider,
         "barbershop_integration": platform_module.barbershop_platform.enabled,
+        "lead_source": active_lead_source(),
     }
 
 

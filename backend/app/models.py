@@ -30,6 +30,8 @@ class LeadSource(str, Enum):
 
     SYNTHETIC = "SYNTHETIC"
     GOOGLE_PLACES = "GOOGLE_PLACES"
+    APIFY_GOOGLE_MAPS = "APIFY_GOOGLE_MAPS"  # Google Maps pela ferramenta do Apify
+    CSV_IMPORT = "CSV_IMPORT"  # planilha importada no painel
 
 
 class TrialStatus(str, Enum):
@@ -127,7 +129,7 @@ class BarbershopLead:
     trial_status: Optional[TrialStatus] = None
     trial_ends_at: Optional[str] = None
     # Assinatura no barber-shop (espelho do que chega pelos webhooks de lá)
-    subscription_status: Optional[str] = None  # TRIAL | ACTIVE | PAST_DUE | SUSPENDED | EXPIRED
+    subscription_status: Optional[str] = None  # TRIAL | ACTIVE | PAST_DUE | BLOCKED | EXEMPT (antigos: SUSPENDED | EXPIRED)
     plan_code: Optional[str] = None  # SOLO | SQUAD | PRO | EMPIRE
     invoice_url: Optional[str] = None  # fatura em aberto no Asaas
     subscribe_url: Optional[str] = None  # tela de assinatura do painel do dono

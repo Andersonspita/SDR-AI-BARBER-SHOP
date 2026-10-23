@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 SYNTHETIC_BLOCK_REASON = (
     "Lead fictício (gerado localmente, telefone inventado): envio real bloqueado. "
-    "Configure GOOGLE_MAPS_API_KEY para buscar barbearias reais."
+    "Busque com GOOGLE_MAPS_API_KEY ou APIFY_TOKEN configurado, ou importe uma planilha."
 )
 
 

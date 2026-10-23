@@ -148,8 +148,9 @@ def _trial_activator_node(state: GraphState) -> GraphState:
     return state
 
 
-# Situações em que o dono precisa pagar para a barbearia ficar (ou voltar) no ar.
-OWES_PAYMENT = ("EXPIRED", "PAST_DUE", "SUSPENDED")
+# Situações em que o dono deve mensalidade. BLOCKED = agendamento online pausado; EXPIRED e
+# SUSPENDED são da cobrança antiga do barber-shop e ficam para leads que já estavam assim.
+OWES_PAYMENT = ("PAST_DUE", "BLOCKED", "EXPIRED", "SUSPENDED")
 
 
 def _customer_node(state: GraphState) -> GraphState:
@@ -168,7 +169,7 @@ def _customer_node(state: GraphState) -> GraphState:
                 f"Assim que o pagamento cair, a {lead.shop_name} fica em dia na hora."
             )
         else:
-            # Sem fatura: a cobrança é gerada na plataforma (precisa do CPF/CNPJ); o painel sinaliza.
+            # Sem link: o pagamento online é ligado na plataforma (precisa do CPF/CNPJ); o painel sinaliza.
             lead.needs_billing_help = True
             state["langgraph_node"] = "5.Billing:NeedsCharge"
             state["reply"] = (
@@ -185,7 +186,7 @@ def _customer_node(state: GraphState) -> GraphState:
         state["langgraph_node"] = "5.Billing:SubscribeLink"
         state["reply"] = (
             f"Pra assinar é rapidinho: {lead.subscribe_url}\n"
-            "Escolhe o plano e paga por Pix, boleto ou cartão. Se travar em algo, me chama aqui."
+            "Lá você vê o plano, a primeira mensalidade e como pagar. Se travar em algo, me chama aqui."
         )
     elif status in (None, "TRIAL") and state["intent"] == "INTERESTED":
         return _trial_activator_node(state)
