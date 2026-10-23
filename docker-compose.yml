@@ -34,7 +34,7 @@ services:
 
   # Só sobe com `--profile whatsapp`: no modo padrão (WHATSAPP_PROVIDER=MOCK) a API não precisa dela.
   evolution-api:
-    image: evoapicloud/evolution-api:v2.3.0
+    image: evoapicloud/evolution-api:v2.3.7
     container_name: sdr_ai_evolution
     restart: unless-stopped
     profiles: ["whatsapp"]
