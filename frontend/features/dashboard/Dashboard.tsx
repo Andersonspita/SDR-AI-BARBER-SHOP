@@ -4,8 +4,9 @@ import { useState } from "react";
 import type { Session } from "@/features/auth";
 import { errorMessage, sdrApi } from "./api";
 import { useDashboardData, useLeadInteractions } from "./hooks";
-import type { ScrapeParams, TrialMode } from "./types";
+import type { ImportResult, ScrapeParams, ScrapeResult, TrialMode } from "./types";
 import { Header } from "./components/Header";
+import { ImportLeadsPanel } from "./components/ImportLeadsPanel";
 import { KanbanBoard } from "./components/KanbanBoard";
 import { MetricsRow } from "./components/MetricsRow";
 import { ScraperHero } from "./components/ScraperHero";
@@ -14,6 +15,24 @@ import { TrialPanel } from "./components/TrialPanel";
 import { WhatsAppSimulator } from "./components/WhatsAppSimulator";
 
 type Notice = { tone: "error" | "info"; text: string } | null;
+
+const APIFY_POLL_INTERVAL_MS = 5_000;
+// A execução no Apify tem teto de 5 min; um pouco de folga para a fila de lá.
+const APIFY_MAX_WAIT_MS = 7 * 60_000;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/** Espera a busca no Apify terminar, consultando o andamento a cada poucos segundos. */
+async function waitForSearch(first: ScrapeResult, params: ScrapeParams): Promise<Extract<ScrapeResult, { status: "done" }>> {
+  let result = first;
+  const deadline = Date.now() + APIFY_MAX_WAIT_MS;
+  while (result.status === "running") {
+    if (Date.now() > deadline) throw new Error("A busca no Apify passou de 7 minutos. Tente de novo em instantes.");
+    await sleep(APIFY_POLL_INTERVAL_MS);
+    result = await sdrApi.scrapeProgress(result.run_id, params);
+  }
+  return result;
+}
 
 interface DashboardProps {
   session: Session;
@@ -30,6 +49,7 @@ export function Dashboard({ session }: DashboardProps) {
   const [sendingLeadId, setSendingLeadId] = useState<string | null>(null);
   const [isSimulating, setIsSimulating] = useState(false);
   const [isActivatingTrial, setIsActivatingTrial] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
 
   const isMockProvider = metrics?.whatsapp_provider === "MOCK";
   const blockedSyntheticCount = metrics && !isMockProvider ? leads.filter((lead) => lead.is_synthetic).length : 0;
@@ -44,8 +64,18 @@ export function Dashboard({ session }: DashboardProps) {
   const handleSearch = async (params: ScrapeParams) => {
     setIsSearching(true);
     try {
-      const result = await sdrApi.scrapeLeads(params);
-      setNotice({ tone: "info", text: `${result.count} barbearias encontradas em ${params.city}/${params.state}.` });
+      const started = await sdrApi.scrapeLeads(params);
+      if (started.status === "running") {
+        setNotice({ tone: "info", text: `Buscando barbearias em ${params.city}/${params.state} no Google Maps. Leva de 1 a 3 minutos…` });
+      }
+      const result = await waitForSearch(started, params);
+      const repeated = result.count - result.new;
+      setNotice({
+        tone: "info",
+        text:
+          `${result.count} barbearias encontradas em ${params.city}/${params.state}` +
+          (repeated > 0 ? ` (${result.new} novas, ${repeated} já estavam no funil).` : "."),
+      });
       if (result.leads[0]) setSelectedLeadId(result.leads[0].id);
       await refresh();
     } catch (err) {
@@ -53,6 +83,11 @@ export function Dashboard({ session }: DashboardProps) {
     } finally {
       setIsSearching(false);
     }
+  };
+
+  const handleImported = async (result: ImportResult) => {
+    if (result.leads[0]) setSelectedLeadId(result.leads[0].id);
+    await refresh();
   };
 
   const handleSendD0 = async (leadId: string) => {
@@ -124,7 +159,12 @@ export function Dashboard({ session }: DashboardProps) {
         userEmail={session.email}
         onLogout={() => void session.logout()}
       />
-      <ScraperHero isSearching={isSearching} onSearch={handleSearch} />
+      <ScraperHero
+        isSearching={isSearching}
+        searchSource={metrics?.lead_source ?? null}
+        onSearch={handleSearch}
+        onOpenImport={() => setIsImportOpen(true)}
+      />
 
       <div className="container">
         {loadError && (
@@ -139,7 +179,7 @@ export function Dashboard({ session }: DashboardProps) {
           <div className="banner info" role="status">
             <span>
               {blockedSyntheticCount} lead(s) fictício(s) na base: com WhatsApp real ({metrics?.whatsapp_provider}) eles nunca
-              recebem mensagem. Configure GOOGLE_MAPS_API_KEY para buscar barbearias reais.
+              recebem mensagem. Busque com APIFY_TOKEN ou GOOGLE_MAPS_API_KEY configurado, ou importe uma planilha.
             </span>
           </div>
         )}
@@ -151,6 +191,7 @@ export function Dashboard({ session }: DashboardProps) {
             </button>
           </div>
         )}
+        {isImportOpen && <ImportLeadsPanel onImported={handleImported} onClose={() => setIsImportOpen(false)} />}
       </div>
 
       <MetricsRow metrics={metrics} />

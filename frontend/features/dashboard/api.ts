@@ -1,4 +1,4 @@
-import type { Interaction, Lead, Metrics, ScrapeParams, TrialMode, WebhookResult } from "./types";
+import type { ImportResult, Interaction, Lead, Metrics, ScrapeParams, ScrapeResult, TrialMode, WebhookResult } from "./types";
 
 const API_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
 
@@ -70,7 +70,16 @@ export const sdrApi = {
   logout: () => post<{ status: string }>("/api/auth/logout"),
   me: () => request<{ email: string }>("/api/auth/me", { skipAuthRedirect: true }),
   listLeads: () => request<{ count: number; leads: Lead[] }>("/api/leads"),
-  scrapeLeads: (params: ScrapeParams) => post<{ count: number; leads: Lead[] }>("/api/leads/scrape", params),
+  scrapeLeads: (params: ScrapeParams) => post<ScrapeResult>("/api/leads/scrape", params),
+  /** Andamento de uma busca no Apify (a mesma UF/cidade/bairro do pedido). */
+  scrapeProgress: (runId: string, params: ScrapeParams) => {
+    const query = new URLSearchParams({ state: params.state, city: params.city });
+    if (params.neighborhood) query.set("neighborhood", params.neighborhood);
+    return request<ScrapeResult>(`/api/leads/scrape/${encodeURIComponent(runId)}?${query.toString()}`);
+  },
+  importLeads: (csv: string, defaults: { default_state?: string; default_city?: string }) =>
+    post<ImportResult>("/api/leads/import", { csv, ...defaults }),
+  importTemplate: () => request<{ filename: string; csv: string }>("/api/leads/import/template"),
   sendD0: (leadId: string) =>
     post<{ message: string; lead: Lead }>(`/api/leads/${encodeURIComponent(leadId)}/send-d0`),
   getInteractions: (leadId: string) =>

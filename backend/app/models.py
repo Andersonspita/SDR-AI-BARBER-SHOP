@@ -30,6 +30,8 @@ class LeadSource(str, Enum):
 
     SYNTHETIC = "SYNTHETIC"
     GOOGLE_PLACES = "GOOGLE_PLACES"
+    APIFY_GOOGLE_MAPS = "APIFY_GOOGLE_MAPS"  # Google Maps pela ferramenta do Apify
+    CSV_IMPORT = "CSV_IMPORT"  # planilha importada no painel
 
 
 class TrialStatus(str, Enum):
