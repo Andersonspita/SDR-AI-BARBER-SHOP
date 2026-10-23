@@ -1,4 +1,4 @@
-import type { Lead, LeadStatus, ObjectionType, TrialStatus } from "./types";
+import type { Lead, LeadStatus, ObjectionType, SubscriptionStatus, TrialStatus } from "./types";
 
 export type Tone = "danger" | "brand" | "success" | "muted";
 
@@ -50,8 +50,27 @@ export const TRIAL_STATUS_LABELS: Record<TrialStatus, string> = {
   CONVERTED: "Plano ativado",
 };
 
+export const SUBSCRIPTION_LABELS: Record<SubscriptionStatus, string> = {
+  TRIAL: "em teste grátis",
+  ACTIVE: "em dia",
+  PAST_DUE: "mensalidade vencida",
+  SUSPENDED: "suspensa por falta de pagamento",
+  EXPIRED: "teste vencido",
+};
+
+export const PLAN_LABELS: Record<string, string> = {
+  SOLO: "Solo",
+  SQUAD: "Squad",
+  PRO: "Pro",
+  EMPIRE: "Empire",
+};
+
 /** Linha de destaque do card: o sinal mais relevante para o próximo passo do SDR. */
 export function leadSignal(lead: Lead): { text: string; tone: Tone } {
+  // Pendências de cobrança passam na frente: são dinheiro parado.
+  if (lead.needs_billing_help) return { text: "🧾 Dono quer pagar: gerar cobrança", tone: "danger" };
+  if (lead.subscription_status === "SUSPENDED") return { text: "⛔ Suspensa por falta de pagamento", tone: "danger" };
+  if (lead.subscription_status === "PAST_DUE") return { text: "💸 Mensalidade vencida", tone: "danger" };
   switch (lead.status) {
     case "DO_NOT_CONTACT":
       return { text: "⛔ Pediu para não ser contatado", tone: "muted" };

@@ -194,11 +194,26 @@ async def barbershop_webhook_receiver(request: Request) -> dict:
     lead = await store.get_lead(str(shop.get("externalLeadId") or ""))
     if not lead:
         return {"status": "ignored", "reason": "lead não encontrado"}
-    if not barbershop_webhook.apply_event(lead, event, shop):
+    # Reenvio do mesmo aviso (o barber-shop tenta de novo se não recebeu 2xx): não repete a mensagem.
+    if payload.get("id") and not await store.mark_event_processed(f"bs:{payload['id']}"):
+        return {"status": "duplicate"}
+
+    outcome = barbershop_webhook.apply_event(lead, event, shop)
+    if not outcome.known:
         return {"status": "ignored", "reason": f"evento desconhecido: {event}"}
     await store.save_lead(lead)
     logger.info("barber-shop: %s para %s", event, lead.shop_name)
-    return {"status": "processed", "event": event, "lead": lead.to_dict()}
+
+    # O aviso ao dono sai pela conversa do SDR (o barber-shop não manda o dele para leads do SDR).
+    delivery = None
+    if outcome.message:
+        if lead.status == LeadStatus.DO_NOT_CONTACT:
+            logger.warning("Aviso %s não enviado: %s pediu para não ser contatado", event, lead.shop_name)
+        else:
+            delivery = await send_to_lead(lead, outcome.message, node=lead.langgraph_node, intent="BILLING_NOTICE")
+            if not delivery["delivered"]:
+                logger.warning("Aviso %s para %s não saiu: %s", event, lead.shop_name, delivery["error"])
+    return {"status": "processed", "event": event, "delivery": delivery, "lead": lead.to_dict()}
 
 
 @api.post("/simulator/inbound")

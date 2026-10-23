@@ -49,6 +49,10 @@ class LeadRepository(Protocol):
 
     async def set_setting(self, key: str, value: str) -> None: ...
 
+    async def mark_event_processed(self, event_id: str) -> bool:
+        """Registra o id de um webhook. False se ele já tinha sido processado (reenvio)."""
+        ...
+
     async def try_acquire_worker_lock(self) -> bool:
         """Garante um único worker de cadência ativo entre réplicas da API. True = este processo lidera."""
         ...

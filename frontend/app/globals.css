@@ -190,6 +190,8 @@ code { font-family: var(--font-mono), monospace; }
 /* Teste grátis no barber-shop */
 .trial-panel { padding: 14px; background: var(--surface-1); border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 8px; }
 .trial-status { font-size: 13px; font-weight: 600; }
+.subscription-summary { display: flex; flex-direction: column; gap: 4px; }
+.subscription-summary a { color: var(--brand-400); }
 
 /* Login e sessão */
 .login-shell { position: relative; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px 16px; }

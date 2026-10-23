@@ -59,6 +59,10 @@ def build_metrics(
             1 for l in leads if l.status in (LeadStatus.INTERESTED, LeadStatus.TRIAL_STARTED, LeadStatus.CONVERTED)
         ),
         "converted_count": sum(1 for l in leads if l.status == LeadStatus.CONVERTED),
+        # Clientes que pedem ação: mensalidade vencida/suspensa ou cobrança a gerar
+        "billing_attention_count": sum(
+            1 for l in leads if l.needs_billing_help or l.subscription_status in ("PAST_DUE", "SUSPENDED")
+        ),
         "active_trials_count": sum(
             1 for l in leads if l.trial_status and l.trial_status.value in ("PROVISIONED", "ACTIVATED", "EXPIRING")
         ),
@@ -139,6 +143,9 @@ class SDRStore:
 
     async def try_acquire_worker_lock(self) -> bool:
         return await self.repo.try_acquire_worker_lock()
+
+    async def mark_event_processed(self, event_id: str) -> bool:
+        return await self.repo.mark_event_processed(event_id)
 
     async def daily_sent_count(self) -> int:
         """Envios OUTBOUND desde a meia-noite (BRT), base do limite anti-ban por instância."""

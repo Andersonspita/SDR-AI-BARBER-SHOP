@@ -54,6 +54,14 @@ ALTER TABLE barbershop_leads ADD COLUMN IF NOT EXISTS trial_shop_id VARCHAR(64);
 ALTER TABLE barbershop_leads ADD COLUMN IF NOT EXISTS trial_status VARCHAR(20);
 ALTER TABLE barbershop_leads ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMP WITH TIME ZONE;
 
+-- Assinatura no barber-shop (teste, plano ativo, inadimplência), para o SDR avisar o dono na conversa
+ALTER TABLE barbershop_leads ADD COLUMN IF NOT EXISTS subscription_status VARCHAR(20);
+ALTER TABLE barbershop_leads ADD COLUMN IF NOT EXISTS plan_code VARCHAR(10);
+ALTER TABLE barbershop_leads ADD COLUMN IF NOT EXISTS invoice_url TEXT;
+ALTER TABLE barbershop_leads ADD COLUMN IF NOT EXISTS subscribe_url TEXT;
+ALTER TABLE barbershop_leads ADD COLUMN IF NOT EXISTS suspends_at TIMESTAMP WITH TIME ZONE;
+ALTER TABLE barbershop_leads ADD COLUMN IF NOT EXISTS needs_billing_help BOOLEAN NOT NULL DEFAULT FALSE;
+
 CREATE TABLE IF NOT EXISTS interactions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     lead_id UUID REFERENCES barbershop_leads(id) ON DELETE CASCADE,
@@ -63,6 +71,15 @@ CREATE TABLE IF NOT EXISTS interactions (
     intent_detected VARCHAR(50),
     langgraph_node VARCHAR(80),
     sent_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Ordem de gravação: desempata mensagens com o mesmo sent_at (relógio de baixa resolução no Windows)
+ALTER TABLE interactions ADD COLUMN IF NOT EXISTS seq BIGSERIAL;
+
+-- Webhooks do barber-shop já processados: um reenvio não manda a mesma mensagem duas vezes ao dono
+CREATE TABLE IF NOT EXISTS processed_webhook_events (
+    id VARCHAR(80) PRIMARY KEY,
+    received_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
 -- Configurações operacionais alteradas pelo painel (ex: modo de trial do Agente 5)

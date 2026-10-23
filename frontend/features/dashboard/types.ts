@@ -23,6 +23,9 @@ export type CadenceStep = "D0" | "D2" | "D5";
 /** Teste grátis no barber-shop, atualizado pelos webhooks de lá. */
 export type TrialStatus = "PROVISIONED" | "ACTIVATED" | "EXPIRING" | "EXPIRED" | "CONVERTED";
 
+/** Assinatura no barber-shop (espelho dos webhooks de lá). */
+export type SubscriptionStatus = "TRIAL" | "ACTIVE" | "PAST_DUE" | "SUSPENDED" | "EXPIRED";
+
 export type ObjectionType = "SEM_TEMPO" | "CLIENTES_VELHOS" | "CADERNO" | "CONCORRENTE";
 
 export type Intent = "UNSUBSCRIBE" | "OBJECTION_RAISED" | "INTERESTED" | "NEUTRAL" | "BLOCKED";
@@ -63,6 +66,13 @@ export interface Lead {
   trial_shop_id: string | null;
   trial_status: TrialStatus | null;
   trial_ends_at: string | null;
+  subscription_status: SubscriptionStatus | null;
+  plan_code: string | null;
+  invoice_url: string | null;
+  subscribe_url: string | null;
+  suspends_at: string | null;
+  /** O dono pediu para pagar e não há fatura: gerar a cobrança na plataforma. */
+  needs_billing_help: boolean;
   created_at: string;
 }
 
@@ -94,6 +104,7 @@ export interface Metrics {
   barbershop_integration: boolean;
   converted_count: number;
   active_trials_count: number;
+  billing_attention_count: number;
 }
 
 export interface ScrapeParams {

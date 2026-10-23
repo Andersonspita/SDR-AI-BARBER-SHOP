@@ -122,8 +122,8 @@ O teste grátis é uma barbearia de verdade no [barber-shop](https://github.com/
 1. O barbeiro demonstra interesse e o SDR pede o **e-mail** dele, que é o login no painel do barber-shop.
 2. **Link Automático:** ao receber o e-mail, o SDR cria a barbearia (com jornada e os serviços Corte, Barba e Combo) e responde na mesma conversa com o link da vitrine e um link de uso único para o dono criar a senha (72h).
    **Stand-by VIP:** o lead fica na fila e um humano clica em **Liberar e enviar link** no painel.
-3. O barber-shop avisa o SDR por webhook assinado (`/webhook/barbershop`): o dono entrou, o teste vence em 48h, o teste venceu (a página sai do ar) e o plano foi ativado (o lead vira `CONVERTED`).
-4. Por enquanto, a conversão é manual: quem opera a plataforma clica em **Ativar plano** em `/plataforma` depois de receber o pagamento.
+3. O barber-shop avisa o SDR por webhook assinado (`/webhook/barbershop`) sobre o teste (o dono entrou, vence em 48h, venceu) e sobre a assinatura (fatura gerada, pagamento confirmado, vencida, suspensa, reativada). **O SDR manda cada aviso na própria conversa com o dono**, e a resposta dele cai no grafo: quem deve recebe o link da fatura, quem está em teste recebe o link para assinar.
+4. A cobrança é pelo Asaas, no barber-shop. Quando o dono quer pagar e ainda não há fatura, o painel do SDR mostra **Gerar cobrança em /plataforma**, e o link chega na conversa sozinho.
 
 Travas: lead fictício não ganha teste (a não ser com `BARBERSHOP_ALLOW_SYNTHETIC_TRIALS=true`, só para teste local); se o barber-shop falhar, o lead cai na fila de liberação manual e o dono recebe um "te mando o link em instantes".
 
