@@ -80,8 +80,16 @@ def _parse_iso(value: Optional[str]) -> Optional[datetime]:
 
 
 def _when(value: Optional[str]) -> str:
+    """
+    "29/10" ou "29/10 às 10:00". O fim do teste e a pausa do agendamento vêm do barber-shop como
+    dia puro (meia-noite UTC): convertidos para Brasília, cairiam às 21h do dia anterior.
+    """
     moment = _parse_iso(value)
-    return moment.astimezone(BRT).strftime("%d/%m às %H:%M") if moment else "em breve"
+    if not moment:
+        return "em breve"
+    if (moment.hour, moment.minute, moment.second) == (0, 0, 0) and moment.utcoffset().total_seconds() == 0:
+        return moment.strftime("%d/%m")
+    return moment.astimezone(BRT).strftime("%d/%m às %H:%M")
 
 
 def _sync_shop(lead: BarbershopLead, shop: dict) -> None:
@@ -106,40 +114,44 @@ def build_notice(event: str, lead: BarbershopLead, shop: dict) -> Optional[str]:
     """Texto do aviso ao dono, no mesmo tom da conversa de venda."""
     name = shop.get("name") or lead.shop_name
     invoice = shop.get("invoiceUrl")
-    pay_line = f"Dá pra pagar por aqui: {invoice}" if invoice else "Me responde aqui que eu te mando o link pra pagar."
+    subscribe = shop.get("subscribeUrl") or lead.subscribe_url
+    # Sem pagamento online, a fatura e o jeito de pagar ficam na tela de Assinatura do painel.
+    if invoice:
+        pay_line = f"Dá pra pagar por aqui (Pix, boleto ou cartão): {invoice}"
+    elif subscribe:
+        pay_line = f"A fatura e como pagar estão no seu painel: {subscribe}"
+    else:
+        pay_line = "Me responde aqui que eu te mando como pagar."
+    # O atraso nunca tira a página do ar: só o agendamento online pausa.
+    pause_line = (
+        f"Se não cair até {_when(shop.get('suspendsAt'))}, o agendamento online fica pausado "
+        "(a página, a agenda e o painel continuam funcionando)."
+    )
 
     if event == "trial.expiring":
-        subscribe = shop.get("subscribeUrl") or lead.subscribe_url
         return (
-            f"Opa! O teste grátis da {name} acaba {_when(shop.get('trialEndsAt'))}.\n"
-            f"Pra página continuar no ar, é só assinar por aqui: {subscribe}\n"
-            "Se preferir, me fala o plano que eu te ajudo por aqui mesmo."
+            f"Opa! O teste grátis da {name} acaba em {_when(shop.get('trialEndsAt'))}.\n"
+            f"Pra seguir com a agenda online, é só pagar a primeira mensalidade. {pay_line}\n"
+            "Qualquer dúvida sobre os planos, me chama aqui."
         )
     if event == "trial.expired":
         return (
-            f"O teste grátis da {name} terminou e a página saiu do ar, mas ficou tudo guardado "
-            "(clientes, serviços e horários).\n"
-            "Quer continuar? Me responde aqui que eu gero a cobrança e ela volta ao ar assim que o pagamento cair."
+            f"O teste grátis da {name} terminou e a primeira mensalidade venceu. {pay_line}\n" + pause_line
         )
     if event == "subscription.invoice_created":
-        return (
-            f"Sua assinatura do Gerente Barber tá pronta! {pay_line}\n"
-            "Assim que o pagamento cair, o plano ativa na hora."
-        )
+        return f"A mensalidade do Gerente Barber da {name} tá disponível. {pay_line}"
     if event == "subscription.activated":
-        return f"Pagamento confirmado! O plano da {name} tá ativo. Bom trabalho aí! ✂️"
+        return f"Pagamento confirmado! A assinatura da {name} tá ativa. Bom trabalho aí! ✂️"
     if event == "subscription.past_due":
-        return (
-            f"A mensalidade do Gerente Barber da {name} venceu. {pay_line}\n"
-            f"Se não cair até {_when(shop.get('suspendsAt'))}, a página sai do ar (nada é apagado)."
-        )
+        return f"A mensalidade do Gerente Barber da {name} venceu. {pay_line}\n" + pause_line
     if event == "subscription.suspended":
         return (
-            f"A página da {name} saiu do ar por falta de pagamento. "
-            + (f"Assim que a fatura for paga ela volta sozinha: {invoice}" if invoice else "Me responde aqui que eu te ajudo a regularizar.")
+            f"O agendamento online da {name} foi pausado por falta de pagamento. A página, a agenda já "
+            "marcada e o painel continuam funcionando.\n"
+            + (f"Assim que a fatura for paga, volta na hora: {invoice}" if invoice else pay_line)
         )
     if event == "subscription.reactivated":
-        return f"Pagamento recebido, valeu! A {name} tá em dia e no ar."
+        return f"Pagamento recebido, valeu! A {name} tá em dia e o agendamento online tá liberado."
     return None
 
 
